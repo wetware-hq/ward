@@ -156,6 +156,10 @@ def outputs(h, art, truth):
             ok = hit is not None and hit[1].kind == "orders" and any(hit[2].jobs[item]["text"] in f for f in _flags(h, hit[0]))
         elif sec == "checker.answers":
             ok = hit is not None and h.peek(hit[0])["answers"].get(item) not in (None, "unanswered")
+        elif sec.startswith("clinician queue"):
+            surf = "\n".join(q for eid in h.episodes for q in _queue_text(h, eid))
+            want = row.get("value") or _line_text(row.get("source_line", ""))
+            ok = bool(want) and _fill_match(want, surf)
         elif sec.startswith("patient view:"):
             ok = sec.split(":", 1)[1].strip() in views
         elif sec == "gallery" or t == "figure":

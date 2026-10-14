@@ -112,16 +112,15 @@ def test_t4_broken(decl, broken):
     assert st.check_t4(o, d)
 
 
-def test_t1_t2_reviewed_t3_t4_pending():
-    assert st.REVIEWED == {"S05-T1-unconfirmed", "S05-T2-changed"}
+def test_all_four_s05_tests_reviewed(decl):
+    assert st.REVIEWED == set(decl)
 
 
 # ---- scoring: passing checks stay pending_review until Physician has checked them
-def test_passing_check_is_pending_review_and_not_scored(monkeypatch, decl):
+def test_passing_check_is_pending_review_until_reviewed(monkeypatch, decl):
     d = decl["S05-T3-sensitive-cut"]
-    res = st.run_declared("S05", [d], None, t3_art())
-    assert res == {d["id"]: st.PENDING_REVIEW}
-    ok, _ = scorer.scenario_tests(None, {"scenario_tests": [d]}, t3_art())
-    assert not ok
+    monkeypatch.setattr(st, "REVIEWED", set())
+    assert st.run_declared("S05", [d], None, t3_art()) == {d["id"]: st.PENDING_REVIEW}
+    assert not scorer.scenario_tests(None, {"scenario_tests": [d]}, t3_art())[0]
     monkeypatch.setattr(st, "REVIEWED", {d["id"]})
     assert scorer.scenario_tests(None, {"scenario_tests": [d]}, t3_art())[0]
