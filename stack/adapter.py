@@ -40,7 +40,9 @@ def sensitive_ids(case_path):
     """forms questions have no 'sensitive' field (gap); a stack sidecar <case>.sensitive.toml lists them."""
     if not case_path:
         return set()
-    side = os.path.join(HERE, "cases", os.path.basename(case_path).replace(".toml", ".sensitive.toml"))
+    side = case_path.replace(".toml", ".sensitive.toml")
+    if not os.path.exists(side):
+        side = os.path.join(HERE, "cases", os.path.basename(case_path).replace(".toml", ".sensitive.toml"))
     if not os.path.exists(side):
         return set()
     with open(side, "rb") as f:
@@ -112,15 +114,17 @@ def letter_lines(fs, audience, phrases):
         if "record" in f:
             out.append((f["field"], f["text"], ev)); continue
         q = f["text"].rstrip("?")
+        if f["sensitive"] and audience != "patient":
+            # leak guard: a sensitive answer's text never goes into clinician notes; the alert line and the
+            # event id stand in its place, whatever the status
+            out.append(("Problems", lt("LT-SENSITIVE-ALERT-CLIN", **{"event id": letter_event_id(f["event_id"]) if f["event_id"] else "none"}), ev))
+            continue
         if f["status"] in ("declined", "unknown", "stale"):
             st = "unknown" if f["status"] == "stale" else f["status"]
             key = f"LT-{st.upper()}-{'PT' if audience == 'patient' else 'CLIN'}"
             if f["safety"] and key + "-SAFETY" in lt_lines():
                 key += "-SAFETY"
             out.append(("Problems", lt(key, question=q, **{"question plain wording": q}), ev))
-        elif f["sensitive"] and f["safety"] and audience != "patient":
-            out.append(("Problems", lt("LT-SENSITIVE-ALERT-CLIN", **{"event id": letter_event_id(f["event_id"])}), ev))
-            continue
         else:
             yes, no = phrases.get(f["item_id"], (None, None))
             t = yes if f["value"] else no

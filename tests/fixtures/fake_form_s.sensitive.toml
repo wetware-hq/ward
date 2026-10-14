@@ -1,0 +1,2 @@
+# FAKE sidecar for unit tests.
+sensitive = ["fake_a"]

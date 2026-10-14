@@ -9,7 +9,7 @@ import os, re
 WORKSPACE = os.environ.get("STACK_WORKSPACE", "/workspace")
 SIGNED = os.path.join(WORKSPACE, "wording", "forms_orders_lines_SIGNED.md")
 ROUND6 = os.path.join(WORKSPACE, "wording", "forms_orders_lines_round6_DRAFT.md")
-PENDING_IDS = {"BK-NO-PACK", "RF-AGENT-REVOKE"}     # round 7, still DRAFT: used by id only
+PENDING_IDS = set()      # ids used by the stack but not yet in SIGNED; any id missing from SIGNED is PENDING WORDING
 PENDING_WORDING = "PENDING WORDING"
 # Signed decision-maker term per pack. Only au is backed by a signed source: forms RELATIONSHIP (signed).
 LEGAL_TERM_SOURCE = {"au": "forms/messages.py RELATIONSHIP['sdm']"}
@@ -40,9 +40,16 @@ def line(block_id, **f):
     t = None if block_id in PENDING_IDS else _round6().get(block_id)
     if t is None:
         return f"{PENDING_WORDING}: {block_id}"
+    f = dict(f)
+    if "locale pack" in f:
+        f.setdefault("locale", f["locale pack"])
     for k, v in f.items():
         t = t.replace(f"[{k}]", str(v))
     return t
+
+
+def signed(line_id):
+    return line_id in _round6()
 
 
 def open_blocks(pack, language, needs=()):

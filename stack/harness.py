@@ -235,6 +235,12 @@ class Harness:
         if not isinstance(r, dict):
             r = {"accepted": True, "value": r}
         new = env.log[before:]
+        if method == "step" and r.get("accepted") and h.role == "patient" and locales.signed("PV-ANS-CHANGED"):
+            # the patient changed an answer their agent gave: thank them (only once the line is signed)
+            for e in new:
+                prev = [x for x in ep.log if x.get("question_id") == e.get("question_id") and x["type"] == "answer"]
+                if e["type"] == "answer" and prev and prev[-1].get("role") == "patient_agent" and prev[-1]["value"] != e["value"]:
+                    r = dict(r, message=locales.line("PV-ANS-CHANGED"))
         if method == "step" and r.get("accepted"):
             ep.log.extend(new)
             rec["events"] = [len(ep.log) - len(new) + i for i in range(len(new))]

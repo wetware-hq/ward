@@ -1,0 +1,20 @@
+# FAKE fixture for scorer unit tests only. Not a scenario.
+form_id = "FAKE-form-s"
+version = "1"
+audience = "patient"
+
+[[question]]
+id = "fake_a"
+version = "1"
+text = "Is this fake question A?"
+alert_answer = true
+safety_critical = false
+clinician_must_confirm = false
+
+[[question]]
+id = "fake_b"
+version = "1"
+text = "Is this fake question B?"
+alert_answer = true
+safety_critical = false
+clinician_must_confirm = false

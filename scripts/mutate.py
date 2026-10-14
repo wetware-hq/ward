@@ -16,6 +16,12 @@ MUTANTS = [
     ("stack/locales.py", '    if "legal_term" in needs and legal_term_block(pack):', "    if False:"),
     ("stack/adapter.py", '    if bundle["blocks"]:', "    if False:"),
     ("stack/endware.py", '    if any(bd["blocks"] for bd in bundles):', "    if False:"),
+    # leak guard: sensitive answers never reach clinician notes
+    ("stack/adapter.py", '        if f["sensitive"] and audience != "patient":', '        if False:'),
+    ("stack/adapter.py", '        if f["sensitive"] and audience != "patient":', '        if f["sensitive"] and f["safety"] and audience != "patient":'),
+    ("stack/adapter.py", '        if f["sensitive"] and audience != "patient":', '        if f["sensitive"] and f["status"] == "answered" and audience != "patient":'),
+    ("stack/adapter.py", '            continue\n        if f["status"] in', '            pass\n        if f["status"] in'),
+    ("stack/adapter.py", '"sensitive": i in sens', '"sensitive": False'),
 ]
 
 

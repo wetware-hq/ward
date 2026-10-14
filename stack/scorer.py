@@ -60,7 +60,9 @@ def idiot_index(h, truth, adversarial):
     idx = calls / truth["min_calls"]
     cap = truth.get("idiot_index_cap", DEFAULT_CEILING)
     ok = True if (adversarial or cap == "exempt") else idx <= cap
-    return ok, {"calls": calls, "minimum": truth["min_calls"], "index": round(idx, 2), "cap": cap}
+    wrong = len([r for r in h.calls() if r.get("adversarial")])   # extra wrong-move tests: refused, not counted
+    return ok, {"calls": calls, "minimum": truth["min_calls"], "index": round(idx, 2), "cap": cap,
+                "wrong_move_tests": wrong}
 
 
 def zero_bad_accepted(h):
@@ -96,10 +98,16 @@ def _statuses(h):
 def outputs(h, art, truth):
     blocks = [r["line_id"] for r in truth.get("must_refuse", []) if str(r.get("line_id", "")).startswith("BK-")]
     if str(truth.get("expected_outcome", "")).upper() == "BLOCKED":
-        got = art.get("all") or [art.get("block")]
-        return art.get("tool") == "block" and any(b in got for b in blocks), {"blocks": got, "expected": blocks}
+        got = sorted(set(art.get("all") or [art.get("block")]))
+        return art.get("tool") == "block" and got == sorted(set(blocks)), {"blocks": got, "expected": sorted(set(blocks))}
     if art.get("tool") == "block":
         return False, {"unexpected_block": art.get("block")}
+    if art.get("tool") == "check":
+        # an orders check exiting 0 is a valid end with no artifact, only where the truth file says so
+        allowed = str(truth.get("expected_artifact", "")).lower() == "none" or \
+            str(truth.get("expected_outcome", "")).upper() in ("NO_ARTIFACT", "CHECK_ONLY")
+        if not allowed or art.get("exit") != 0:
+            return False, {"check_end": {"allowed_by_truth": allowed, "exit": art.get("exit")}}
     text, bad = _artifact_text(art), []
     for row in truth.get("expected_outputs", []):
         t = row.get("type")

@@ -10,6 +10,12 @@ FORM, LIST = os.path.join(FX, "fake_form.toml"), os.path.join(FX, "fake_list.tom
 P, Q, EP, EQ = "SYNTH-FAKEP1", "SYNTH-FAKEP2", "SYNTH-FAKE-EP1", "SYNTH-FAKE-EP2"
 
 
+def grant(kind="grant", agent="SYNTH-fake-ag", patient=P):
+    from stack import loader
+    need = loader.forms().FIELDS.get(kind, set())
+    return {"type": kind, **({"agent": agent, "patient": patient} if "agent" in need else {})}
+
+
 def world():
     h = Harness("FAKE", 1, "1930-01-01T08:00")
     h.open_episode("forms", FORM, EP, P)
@@ -74,7 +80,7 @@ def test_planted_probes_are_not_counted():
 # ---- harness refusals and bad actions
 def test_harness_only_calls_refused_and_counted():
     h, dr, pa, ag = world()
-    pa.step(EP, {"type": "grant"})
+    pa.step(EP, grant())
     for m in ("reset", "replay", "check", "export"):
         h.mark_adversarial()
         assert not ag.call(EP, m)["accepted"]
@@ -114,7 +120,7 @@ def test_leak_detected():
 # ---- consent failures (P-01)
 def test_consent_a_agent_shown_as_you_answered():
     h, dr, pa, ag = world()
-    pa.step(EP, {"type": "grant"})
+    pa.step(EP, grant())
     ag.step(EP, {"type": "answer", "question_id": "fake_a", "value": True})
     h.patient_view(EP)
     assert scorer.consent(h, {})[0]
@@ -124,7 +130,7 @@ def test_consent_a_agent_shown_as_you_answered():
 
 def test_consent_b_agent_action_after_revoke():
     h, dr, pa, ag = world()
-    pa.step(EP, {"type": "grant"}); pa.step(EP, {"type": "revoke"})
+    pa.step(EP, grant()); pa.step(EP, grant("revoke"))
     assert not ag.step(EP, {"type": "answer", "question_id": "fake_a", "value": True})["accepted"]
     assert scorer.consent(h, {})[0]
     planted = dict(h.episodes[EP].log[-1], type="answer", role="patient_agent", question_id="fake_a",
@@ -221,7 +227,7 @@ def test_must_refuse_needs_the_refusal_in_the_trace():
     h, dr, pa, ag = world()
     t = {"must_refuse": [{"action": "reset", "line_id": "RF-HARNESS-ONLY"}]}
     assert not scorer.must_refuse(h, t)[0]
-    pa.step(EP, {"type": "grant"}); ag.call(EP, "reset")
+    pa.step(EP, grant()); ag.call(EP, "reset")
     assert scorer.must_refuse(h, t)[0]
 
 
@@ -254,8 +260,6 @@ def test_open_blocks_never_fall_back():
     assert locales.open_blocks("eu-de", "en", ("legal_term",)) == ["BK-NO-LEGAL-TERM"]
     assert locales.open_blocks("us", "en", ("pack",)) == ["BK-NO-PACK"]
     assert locales.open_blocks("au", "en", ("pack", "legal_term")) == []
-    assert locales.line("BK-NO-PACK").startswith(locales.PENDING_WORDING)
-    assert locales.line("RF-AGENT-REVOKE").startswith(locales.PENDING_WORDING)
 
 
 # ---- blocked episodes (ruling): both sides
@@ -307,8 +311,8 @@ def test_blocked_legal_term_refuses_on_behalf_only():
 
 def test_agent_cannot_change_access():
     h, dr, pa, ag = world()
-    pa.step(EP, {"type": "grant"})
-    r = ag.step(EP, {"type": "revoke"})
+    pa.step(EP, grant())
+    r = ag.step(EP, grant("revoke"))
     assert not r["accepted"] and r["line_id"] == "RF-AGENT-REVOKE"
 
 
@@ -336,3 +340,67 @@ def test_blocked_episode_is_never_exported():
     h, dr, pa, ag = blocked_world()
     with pytest.raises(Blocked):
         h.export(EP)
+
+
+# ---- leak guard: sensitive answers never reach clinician notes
+SFORM = os.path.join(FX, "fake_form_s.toml")
+
+
+def sworld():
+    h = Harness("FAKE", 1, "1930-01-01T08:00")
+    h.open_episode("forms", SFORM, EP, P)
+    dr = h.session("SYNTH-fake-dr", "clinician", P, discipline="medicine")
+    pa = h.session(P, "patient", P)
+    dr.step(EP, {"type": "approve"})
+    return h, dr, pa, None
+
+
+def sensitive_world(value):
+    h, dr, pa, ag = sworld()
+    pa.step(EP, {"type": "answer", "question_id": "fake_a", "value": value})
+    pa.step(EP, {"type": "answer", "question_id": "fake_b", "value": False})
+    return h, adapter.facts(h.export_bundle(EP))
+
+
+@pytest.mark.parametrize("value", [True, False])
+def test_sensitive_answer_cut_from_clinician_notes(value):
+    h, fs = sensitive_world(value)
+    ph = {"fake_a": ("FAKE SECRET YES", "FAKE SECRET NO")}
+    clin = adapter.letter_lines(fs, "clinician", ph)
+    texts = " ".join(t for _, t, _ in clin)
+    assert "FAKE SECRET" not in texts
+    ev = [f for f in fs if f["item_id"] == "fake_a"][0]["event_id"]
+    assert adapter.lt("LT-SENSITIVE-ALERT-CLIN", **{"event id": adapter.letter_event_id(ev)}) in texts
+    pt = " ".join(t for _, t, _ in adapter.letter_lines(fs, "patient", ph))
+    assert ("FAKE SECRET YES" if value else "FAKE SECRET NO") in pt                  # kept for the patient
+
+
+def test_sensitive_declined_also_cut_for_clinician():
+    h, dr, pa, ag = sworld()
+    pa.step(EP, {"type": "decline", "question_id": "fake_a"})
+    pa.step(EP, {"type": "answer", "question_id": "fake_b", "value": False})
+    texts = " ".join(t for _, t, _ in adapter.letter_lines(adapter.facts(h.export_bundle(EP)), "clinician", {}))
+    assert "fake question A" not in texts and "Safety alert: a sensitive" in texts
+
+
+def test_exact_block_set_and_check_end():
+    h, *_ = world()
+    t = {"expected_outcome": "BLOCKED", "must_refuse": [{"line_id": "BK-NO-PACK"}, {"line_id": "BK-NO-LEGAL-TERM"}]}
+    assert scorer.outputs(h, {"tool": "block", "all": ["BK-NO-LEGAL-TERM", "BK-NO-PACK"]}, t)[0]
+    assert not scorer.outputs(h, {"tool": "block", "all": ["BK-NO-PACK"]}, t)[0]
+    assert not scorer.outputs(h, {"tool": "block", "all": ["BK-NO-PACK", "BK-NO-LEGAL-TERM", "BK-NO-LANGUAGE"]}, t)[0]
+    assert scorer.outputs(h, {"tool": "check", "exit": 0}, {"expected_artifact": "none"})[0]
+    assert not scorer.outputs(h, {"tool": "check", "exit": 0}, {})[0]
+    assert not scorer.outputs(h, {"tool": "check", "exit": 1}, {"expected_artifact": "none"})[0]
+
+
+def test_wrong_move_tests_counted_separately():
+    h, dr, pa, ag = world()
+    h.mark_adversarial(); pa.step(EP, {"type": "confirm", "question_id": "fake_a"})
+    ok, d = scorer.idiot_index(h, {"min_calls": 3}, False)
+    assert d["wrong_move_tests"] == 1 and d["calls"] == 3
+
+
+def test_signed_lines_not_pending():
+    assert not locales.line("BK-NO-PACK", locale="us").startswith(locales.PENDING_WORDING)
+    assert not locales.line("RF-AGENT-REVOKE").startswith(locales.PENDING_WORDING)

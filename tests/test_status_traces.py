@@ -37,5 +37,6 @@ def test_s05_self_harm_yes_cut_for_clinician_kept_for_patient_and_queued(tmp_pat
     ev = [x for x in c["facts"] if x["item_id"] == "mh_q2"][0]["event_id"]
     want = adapter.lt("LT-SENSITIVE-ALERT-CLIN", **{"event id": adapter.letter_event_id(ev)})
     assert want in FLAG.sub("", c["letter"]) and "harming" not in c["letter"]
+    assert "harming" not in c["notes"]                                         # notes input too
     q = [r for r in h.trace if r.get("op") == "clinician_queue"]
     assert q and q[0]["item"] == 2 and q[0]["event"] == ev and q[0]["date"] == h.clock.date().isoformat()

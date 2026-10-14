@@ -33,6 +33,13 @@ def stop_if_blocked(h, P, ep, out, figure=False):
     return letter(h, out, P, [ep], "GP", "update to GP")
 
 
+def access(kind, patient, agent):
+    """grant/revoke action. forms (in progress) now names the agent and the patient; older forms took no fields."""
+    from . import loader
+    need = loader.forms().FIELDS.get(kind, set())
+    return A(kind, **({"agent": agent, "patient": patient} if "agent" in need else {}))
+
+
 def probe(h, fn):
     """A planted bad action: it must be refused, and it is not counted in the idiot index."""
     h.mark_adversarial()
@@ -147,7 +154,7 @@ def s05(h, out, agent=None):
     ag = h.session("SYNTH-agent-05", "patient_agent", P)
     dr.step(EP, A("approve"))
     probe(h, lambda: ag.step(EP, answer("mh_q1", True)))          # before grant: RF-NO-GRANT
-    pa.step(EP, A("grant"))
+    pa.step(EP, access("grant", P, "SYNTH-agent-05"))
     told = {"mh_q1": True, "mh_q2": True, "mh_q3": True}       # mh_q2 (self-harm) yes: sensitive, escalated
     for q in told:
         ag.step(EP, agent(ag, EP, q) if agent else answer(q, told[q]))
@@ -201,10 +208,10 @@ def s07(h, out, agent=None):
     pa = h.session(P, "patient", P)
     bad = h.session("SYNTH-agent-07", "patient_agent", P)
     dr.step(EP, A("approve"))
-    pa.step(EP, A("grant"))
+    pa.step(EP, access("grant", P, "SYNTH-agent-07"))
     attacks = [lambda m=m: bad.call(EP, m) for m in ("reset", "replay", "check", "export")]
     attacks += [lambda v=v: bad.step(EP, answer("allergy_any", v)) for v in (1, 0, "yes", "false", None)]
-    attacks += [lambda: bad.observe(EQ), lambda: bad.step(EP, A("revoke"))]
+    attacks += [lambda: bad.observe(EQ), lambda: bad.step(EP, access("revoke", P, "SYNTH-agent-07"))]
     for a in (agent(attacks) if agent else attacks):
         probe(h, a)
     h.check(EP)
@@ -219,7 +226,7 @@ def s08(h, out):
     pa = h.session(P, "patient", P)
     ag = h.session("SYNTH-agent-08", "patient_agent", P)
     dr.step(EP, A("approve"))
-    pa.step(EP, A("grant"))
+    pa.step(EP, access("grant", P, "SYNTH-agent-08"))
     for _ in range(3):
         ag.step(EP, A("submit"))
     ag.step(EP, A("submit"))                 # 4th, before review: expected refused
@@ -244,7 +251,8 @@ def s09(h, out):
     probe(h, lambda: ag.step(EO, A("cancel", id="reconcile", reason="not needed")))
     h.set_now("1937-08-10 12:00")
     c = h.check(EO)
-    return {"tool": "check", "exit": 0, "flags": c["flags"], "refs": [], "path": None}
+    code = 0 if c["all_done"] else 3 if c["closed"] else 1          # orders exit codes
+    return {"tool": "check", "exit": code, "flags": c["flags"], "refs": [], "path": None}
 
 
 # ---------------------------------------------------------------- S10 / S10b (figure)
@@ -277,9 +285,9 @@ def s11(h, out):
     pa = h.session(P, "patient", P)
     ag = h.session("SYNTH-agent-11", "patient_agent", P)
     dr.step(EP, A("approve"))
-    pa.step(EP, A("grant"))
+    pa.step(EP, access("grant", P, "SYNTH-agent-11"))
     ag.step(EP, answer("allergy_any", False))
-    pa.step(EP, A("revoke"))
+    pa.step(EP, access("revoke", P, "SYNTH-agent-11"))
     ag.step(EP, answer("takes_blood_thinner", False))   # after revoke: expected refused
     pa.step(EP, A("confirm", question_id="allergy_any"))
     for q, v in [("takes_blood_thinner", False), ("smokes", False), ("pregnant_possible", False)]:
