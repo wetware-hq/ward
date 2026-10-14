@@ -1,0 +1,11 @@
+# Vocabulary for the generalisation guard (stack/domainscan.py). Named disciplines, specialties, units and
+# drugs that must never be hard-coded in .py code; they belong in signed lists and data files.
+discipline = ["medicine", "nursing", "pharmacy", "physiotherapy", "physio", "midwifery", "dietetics",
+              "occupational therapy", "speech pathology", "social work", "psychology", "radiography"]
+specialty = ["cardiology", "oncology", "neurology", "paediatrics", "pediatrics", "orthopaedics", "psychiatry",
+             "geriatrics", "obstetrics", "gynaecology", "dermatology", "nephrology", "respiratory",
+             "gastroenterology", "anaesthetics", "emergency medicine", "general practice", "surgery", "urology"]
+ward = ["ICU", "HDU", "CCU", "NICU", "ED", "emergency department", "Emergency Department", "Ward 4B"]
+drug = ["aspirin", "paracetamol", "acetaminophen", "ramipril", "warfarin", "heparin", "insulin", "metformin",
+        "morphine", "amoxicillin", "ibuprofen", "apixaban", "rivaroxaban", "enoxaparin", "furosemide",
+        "atorvastatin", "prednisolone", "salbutamol", "crp"]

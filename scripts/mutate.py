@@ -4,6 +4,8 @@ import os, shutil, subprocess, sys, tempfile
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 MUTANTS = [
+    ("stack/domainscan.py", "if isinstance(n, ast.Constant) and isinstance(n.value, str) and id(n) not in skip:", "if isinstance(n, ast.Constant) and isinstance(n.value, str):"),
+    ("stack/domainscan.py", "hits.append((str(path), n.lineno, kind, m.group(1)))", "pass"),
     ("stack/scorer.py", '        elif claim != N.claim_for(N.env_result(r)):', '        elif False:'),
     ("stack/scorer.py", '        if r.get("sensitive_step") and reason.strip():', '        if False:'),
     ("stack/scorer.py", '            if sub and sub in reason:', '            if False:'),
@@ -55,7 +57,7 @@ def main():
             if old not in src:
                 print(f"mutant {n}: SITE NOT FOUND in {path}"); survived += 1; continue
             open(os.path.join(dst, path), "w").write(src.replace(old, new, 1))
-            r = subprocess.run([sys.executable, "-m", "pytest", "-q", "-x", "tests/test_scorer.py"], cwd=dst,
+            r = subprocess.run([sys.executable, "-m", "pytest", "-q", "-x", "tests/test_scorer.py", "tests/test_generalisation.py", "tests/test_blocked_release.py"], cwd=dst,
                                capture_output=True, text=True)
             killed = r.returncode != 0
             survived += not killed

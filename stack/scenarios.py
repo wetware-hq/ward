@@ -10,6 +10,9 @@ HERE = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 WS = os.environ.get("STACK_WORKSPACE", "/workspace")
 FORMS_EX = lambda n: os.path.join(WS, "forms", "examples", n + ".toml")
 CASE = lambda n: os.path.join(HERE, "cases", n + ".toml")
+import tomllib as _toml
+SCN = _toml.load(open(CASE("scenario_data"), "rb"))      # domain names are data, not code
+DISC = SCN["disciplines"]
 
 
 def A(t, **k):
@@ -65,7 +68,7 @@ def check_end(h, ep):
 def s01(h, out):
     P, EP = "SYNTH-P0101", "SYNTH-EP-0101"
     h.open_episode("forms", FORMS_EX("pre_procedure_safety"), EP, P, needs=("pack",))
-    dr = h.session("SYNTH-dr-01", "clinician", P, discipline="medicine")
+    dr = h.session("SYNTH-dr-01", "clinician", P, discipline=DISC["MED"])
     dr.step(EP, A("approve"))
     for q, v in [("identity_confirmed", True), ("consent_signed", True), ("site_marked", True),
                  ("allergies_checked", True), ("fasting_confirmed", True), ("anticoagulant_present", False)]:
@@ -78,9 +81,9 @@ def s01(h, out):
 def s02(h, out):
     P, EF, EO = "SYNTH-P0201", "SYNTH-EP-0201", "SYNTH-EP-0202"
     h.open_episode("forms", CASE("ed_triage"), EF, P, needs=("pack",))
-    rn = h.session("SYNTH-rn-02", "clinician", P, discipline="nursing")
-    dr = h.session("SYNTH-dr-02", "clinician", P, discipline="medicine")
-    ag = h.session("SYNTH-agent-02", "clinician_agent", P, scope=("medicine",))
+    rn = h.session("SYNTH-rn-02", "clinician", P, discipline=DISC["NUR"])
+    dr = h.session("SYNTH-dr-02", "clinician", P, discipline=DISC["MED"])
+    ag = h.session("SYNTH-agent-02", "clinician_agent", P, scope=(DISC["MED"],))
     rn.step(EF, A("approve"))
     rn.step(EF, answer("chest_pain_now", False))
     rn.step(EF, answer("walks_unaided", True))
@@ -88,13 +91,7 @@ def s02(h, out):
     h.check(EF)
     h.open_episode("orders", CASE("ward_discharge"), EO, P, needs=("pack",))
     dr.step(EO, A("approve"))
-    recs = {"SYNTH-REC-0001": ("Medicines", "aspirin 100 mg daily reason: chest pain"),
-            "SYNTH-REC-0002": ("History", "discharge summary written"),
-            "SYNTH-REC-0003": ("Actions", "review in 1 week, GP"),
-            "SYNTH-REC-0004": ("History", "cannula removed"),
-            "SYNTH-REC-0005": ("History", "new medicines explained"),
-            "SYNTH-REC-0006": ("History", "summary sent to GP"),
-            "SYNTH-REC-0007": ("History", "left the ward")}
+    recs = {k: tuple(v) for k, v in SCN["records"]["S02"].items()}
     for rid, (f, t) in recs.items():
         h.record("SYNTH-dr-02", rid, P, f, t)
     probe(h, lambda: ag.step(EO, tick("review_meds", "SYNTH-REC-0001")))      # RF-PERSON-JOB (off path)
@@ -113,11 +110,8 @@ def s02(h, out):
 # ---------------------------------------------------------------- S03 / S03b
 def _s03(h, out, P, EO):
     h.open_episode("orders", CASE("pharmacy_discharge_reconciliation"), EO, P, needs=("pack",))
-    ph = h.session("SYNTH-ph-03", "clinician", P, discipline="pharmacy")
-    for rid, f, t in [("SYNTH-RX-0001", "Medicines", "ramipril 5 mg daily; stopped 1937-08-10 - low blood pressure"),
-                      ("SYNTH-RX-0002", "Medicines", "paracetamol 1 g four times daily max 4 g in 24 hours reason: knee pain"),
-                      ("SYNTH-RX-0003", "Actions", "check blood pressure in 1 week, GP"),
-                      ("SYNTH-RX-0004", "History", "medicine list sent to GP")]:
+    ph = h.session("SYNTH-ph-03", "clinician", P, discipline=DISC["PHA"])
+    for rid, (f, t) in SCN["records"]["S03"].items():
         h.record("SYNTH-ph-03", rid, P, f, t)
     if h.blocked(EO):                         # blocked for output: the clinician still records, output refused
         ph.step(EO, A("approve"))
@@ -127,8 +121,8 @@ def _s03(h, out, P, EO):
         ph.step(EO, tick("reconcile", "SYNTH-RX-0002"))
         ph.step(EO, tick("counsel_patient", "SYNTH-RX-0003"))
         return letter(h, out, P, [EO], "GP", "update to GP")
-    md = h.session("SYNTH-dr-03", "clinician", P, discipline="medicine")
-    ag = h.session("SYNTH-agent-03", "clinician_agent", P, scope=("pharmacy",))
+    md = h.session("SYNTH-dr-03", "clinician", P, discipline=DISC["MED"])
+    ag = h.session("SYNTH-agent-03", "clinician_agent", P, scope=(DISC["PHA"],))
     ph.step(EO, A("approve"))
     ag.step(EO, tick("get_home_list", "SYNTH-RX-0001"))
     probe(h, lambda: ag.step(EO, tick("reconcile", "SYNTH-RX-0002")))
@@ -153,8 +147,8 @@ def s03b(h, out):
 def s04(h, out):
     P, EF = "SYNTH-P0401", "SYNTH-EP-0401"
     h.open_episode("forms", FORMS_EX("physio_falls_risk"), EF, P, needs=("pack",))
-    pt = h.session("SYNTH-pt-04", "clinician", P, discipline="physiotherapy")
-    md = h.session("SYNTH-dr-04", "clinician", P, discipline="medicine")
+    pt = h.session("SYNTH-pt-04", "clinician", P, discipline=DISC["PHY"])
+    md = h.session("SYNTH-dr-04", "clinician", P, discipline=DISC["MED"])
     pt.step(EF, A("approve"))
     for q, v in [("fell_last_year", True), ("stands_unaided", True), ("uses_walking_aid", False), ("tug_slow", False)]:
         pt.step(EF, answer(q, v))
@@ -162,14 +156,14 @@ def s04(h, out):
     pt.step(EF, A("submit"))
     h.check(EF)
     h.patient_view(EF)                       # audit: the safety alert line still shows under the block
-    return letter(h, out, P, [EF], "Physiotherapy clinic", "referral to physiotherapy")
+    return letter(h, out, P, [EF], SCN["letters"]["S04"]["reader"], SCN["letters"]["S04"]["brief"])
 
 
 # ---------------------------------------------------------------- S05 (patient's agent; live-agent capable)
 def s05(h, out, agent=None):
     P, EP = "SYNTH-P0501", "SYNTH-EP-0501"
     h.open_episode("forms", CASE("mood_screen"), EP, P, needs=("pack",))
-    dr = h.session("SYNTH-dr-05", "clinician", P, discipline="medicine")
+    dr = h.session("SYNTH-dr-05", "clinician", P, discipline=DISC["MED"])
     pa = h.session("SYNTH-P0501", "patient", P)
     ag = h.session("SYNTH-agent-05", "patient_agent", P)
     dr.step(EP, A("approve"))
@@ -200,7 +194,7 @@ def s05(h, out, agent=None):
 # ---------------------------------------------------------------- S06a / S06b (substitute decision-maker)
 def _s06(h, out, P, EP):
     h.open_episode("forms", CASE("patient_history"), EP, P, needs=("pack", "legal_term"))
-    dr = h.session("SYNTH-dr-06", "clinician", P, discipline="medicine")
+    dr = h.session("SYNTH-dr-06", "clinician", P, discipline=DISC["MED"])
     pa = h.session(P, "patient", P)
     dr.step(EP, A("approve"))
     if h.blocked(EP):                        # blocked for output: clinician answers with an interpreter
@@ -246,7 +240,7 @@ def s07(h, out, agent=None):
     P, Q, EP, EQ = "SYNTH-P0701", "SYNTH-P0702", "SYNTH-EP-0701", "SYNTH-EP-0702"
     h.open_episode("forms", CASE("patient_history"), EP, P, needs=("pack",))
     h.open_episode("forms", CASE("patient_history"), EQ, Q, audit=True)
-    dr = h.session("SYNTH-dr-07", "clinician", P, discipline="medicine")
+    dr = h.session("SYNTH-dr-07", "clinician", P, discipline=DISC["MED"])
     pa = h.session(P, "patient", P)
     bad = h.session("SYNTH-agent-07", "patient_agent", P)
     dr.step(EP, A("approve"))
@@ -265,7 +259,7 @@ def s07(h, out, agent=None):
 def s08(h, out):
     P, EP = "SYNTH-P0801", "SYNTH-EP-0801"
     h.open_episode("forms", CASE("patient_history"), EP, P, needs=("pack",))
-    dr = h.session("SYNTH-dr-08", "clinician", P, discipline="medicine")
+    dr = h.session("SYNTH-dr-08", "clinician", P, discipline=DISC["MED"])
     pa = h.session(P, "patient", P)
     ag = h.session("SYNTH-agent-08", "patient_agent", P)
     dr.step(EP, A("approve"))
@@ -287,8 +281,8 @@ def s08(h, out):
 def s09(h, out):
     P, EO = "SYNTH-P0901", "SYNTH-EP-0901"
     h.open_episode("orders", CASE("pharmacy_discharge_reconciliation"), EO, P)
-    ph = h.session("SYNTH-ph-09", "clinician", P, discipline="pharmacy")
-    ag = h.session("SYNTH-agent-09", "clinician_agent", P, scope=("pharmacy",))
+    ph = h.session("SYNTH-ph-09", "clinician", P, discipline=DISC["PHA"])
+    ag = h.session("SYNTH-agent-09", "clinician_agent", P, scope=(DISC["PHA"],))
     ph.step(EO, A("approve"))
     probe(h, lambda: ph.step(EO, A("cancel", id="reconcile", reason="")))
     probe(h, lambda: ag.step(EO, A("cancel", id="reconcile", reason="not needed")))
@@ -300,23 +294,24 @@ def s09(h, out):
 
 # ---------------------------------------------------------------- S10 / S10b (figure)
 def _s10(h, out, P, EO):
+    R = SCN["results"]["S10"]
     h.open_episode("orders", CASE("crp_series"), EO, P, needs=("pack",))
-    dr = h.session("SYNTH-dr-10", "clinician", P, discipline="medicine")
-    ag = h.session("SYNTH-agent-10", "clinician_agent", P, scope=("medicine",))
+    dr = h.session("SYNTH-dr-10", "clinician", P, discipline=DISC["MED"])
+    ag = h.session("SYNTH-agent-10", "clinician_agent", P, scope=(DISC["MED"],))
     if h.blocked(EO):                         # blocked for output: the result is recorded, the figure refused
-        probe(h, lambda: h.record_result("SYNTH-agent-10", "SYNTH-REC-1001", P, "CRP", "1937-10-01T08:00:00", 180,
-                                         "mg/L", role="clinician_agent"))
-        h.record_result("SYNTH-dr-10", "SYNTH-REC-1001", P, "CRP", "1937-10-01T08:00:00", 180, "mg/L")
+        probe(h, lambda: h.record_result("SYNTH-agent-10", "SYNTH-REC-1001", P, R["label"], "1937-10-01T08:00:00", 180,
+                                         R["unit"], role="clinician_agent"))
+        h.record_result("SYNTH-dr-10", "SYNTH-REC-1001", P, R["label"], "1937-10-01T08:00:00", 180, R["unit"])
         return run_figure(h, P, EO, ["SYNTH-REC-1001"], "1937-10-16T08:00:00", out)
     dr.step(EO, A("approve"))
     series = [("SYNTH-REC-1001", 180), ("SYNTH-REC-1002", 120), ("SYNTH-REC-1003", 70)]
     for d, (rid, v) in enumerate(series, 1):
-        h.record_result("SYNTH-lab-10", rid, P, "CRP", f"1937-10-0{d}T08:00:00", v, "mg/L")
-    h.record_result("SYNTH-lab-10", "SYNTH-REC-1005", P, "CRP", "1937-10-04T08:00:00", 50, "")   # unit missing
+        h.record_result("SYNTH-lab-10", rid, P, R["label"], f"1937-10-0{d}T08:00:00", v, R["unit"])
+    h.record_result("SYNTH-lab-10", "SYNTH-REC-1005", P, R["label"], "1937-10-04T08:00:00", 50, "")   # unit missing
     for d, (rid, v) in enumerate(series, 1):
         ag.step(EO, tick(f"crp_day{d}", rid))
     ag.step(EO, tick("crp_day4", "SYNTH-REC-1005"))           # the bad row takes the same path as good rows
-    h.record("SYNTH-dr-10", "SYNTH-REC-1004", P, "review", "CRP reviewed")
+    h.record("SYNTH-dr-10", "SYNTH-REC-1004", P, *R["review"])
     dr.step(EO, tick("review_trend", "SYNTH-REC-1004"))
     dr.step(EO, A("submit"))
     h.check(EO)
@@ -337,7 +332,7 @@ def s10b(h, out):
 def s11(h, out):
     P, EP = "SYNTH-P1101", "SYNTH-EP-1101"
     h.open_episode("forms", CASE("patient_history"), EP, P, needs=("pack",))
-    dr = h.session("SYNTH-dr-11", "clinician", P, discipline="medicine")
+    dr = h.session("SYNTH-dr-11", "clinician", P, discipline=DISC["MED"])
     pa = h.session(P, "patient", P)
     ag = h.session("SYNTH-agent-11", "patient_agent", P)
     dr.step(EP, A("approve"))
@@ -364,7 +359,7 @@ def s11(h, out):
 def s12(h, out):
     P, EP = "SYNTH-P1201", "SYNTH-EP-1201"
     h.open_episode("forms", CASE("patient_history"), EP, P, needs=("pack",))
-    dr = h.session("SYNTH-dr-12", "clinician", P, discipline="medicine")
+    dr = h.session("SYNTH-dr-12", "clinician", P, discipline=DISC["MED"])
     pa = h.session(P, "patient", P)
     dr.step(EP, A("approve"))
     pa.step(EP, A("decline", question_id="allergy_any"))          # the parent question

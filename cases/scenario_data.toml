@@ -1,0 +1,31 @@
+# Synthetic scenario data read by stack/scenarios.py: disciplines, clinical record texts, result labels and
+# letter readers. Domain names live here (data), never in .py code (generalisation guard).
+[disciplines]
+MED = "medicine"
+NUR = "nursing"
+PHA = "pharmacy"
+PHY = "physiotherapy"
+
+[records.S02]
+"SYNTH-REC-0001" = ["Medicines", "aspirin 100 mg daily reason: chest pain"]
+"SYNTH-REC-0002" = ["History", "discharge summary written"]
+"SYNTH-REC-0003" = ["Actions", "review in 1 week, GP"]
+"SYNTH-REC-0004" = ["History", "cannula removed"]
+"SYNTH-REC-0005" = ["History", "new medicines explained"]
+"SYNTH-REC-0006" = ["History", "summary sent to GP"]
+"SYNTH-REC-0007" = ["History", "left the ward"]
+
+[records.S03]
+"SYNTH-RX-0001" = ["Medicines", "ramipril 5 mg daily; stopped 1937-08-10 - low blood pressure"]
+"SYNTH-RX-0002" = ["Medicines", "paracetamol 1 g four times daily max 4 g in 24 hours reason: knee pain"]
+"SYNTH-RX-0003" = ["Actions", "check blood pressure in 1 week, GP"]
+"SYNTH-RX-0004" = ["History", "medicine list sent to GP"]
+
+[results.S10]
+label = "CRP"
+unit = "mg/L"
+review = ["review", "CRP reviewed"]
+
+[letters.S04]
+reader = "Physiotherapy clinic"
+brief = "referral to physiotherapy"

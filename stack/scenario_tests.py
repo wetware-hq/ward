@@ -34,7 +34,7 @@ def _world():
     from .scenarios import CASE
     h = Harness("S05-scenario-test", 591, "1936-08-10T10:00")
     h.open_episode("forms", CASE("mood_screen"), EP, P)
-    dr = h.session("SYNTH-dr-0591", "clinician", P, discipline="medicine")
+    dr = h.session("SYNTH-dr-0591", "clinician", P, discipline=__import__("stack.scenarios", fromlist=["DISC"]).DISC["MED"])
     pa = h.session(P, "patient", P)
     ag = h.session(AGENT, "patient_agent", P)
     from .scenarios import access

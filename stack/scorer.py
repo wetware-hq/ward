@@ -403,7 +403,7 @@ def _ref_ok(h, ref):
     return False
 
 
-BOILER = re.compile(r"none recorded|not documented|No medicine changes documented|were written in your notes", re.I)
+BOILER = re.compile(r"none recorded|not documented|No \w+ changes documented|were written in your notes", re.I)
 
 
 def cites_logged(h, art):
