@@ -1,0 +1,104 @@
+# Synthetic. Copy of orders/examples/ward_discharge.toml (unchanged jobs) with two registered evidence
+# records added for send_summary and discharge (task b). Original: ward discharge jobs for an invented patient. Source lines refer to an invented plan of 7 lines.
+list_id = "SYNTH-discharge-0001"
+version = "1"
+source_lines = 7
+
+[[record]]
+id = "SYNTH-REC-0001"
+kind = "medicine review note"
+
+[[record]]
+id = "SYNTH-REC-0002"
+kind = "discharge summary"
+
+[[record]]
+id = "SYNTH-REC-0003"
+kind = "clinic booking"
+
+[[record]]
+id = "SYNTH-REC-0004"
+kind = "nursing note"
+
+[[record]]
+id = "SYNTH-REC-0005"
+kind = "sent document"
+
+[[record]]
+id = "SYNTH-REC-0006"
+kind = "sent document"
+
+[[record]]
+id = "SYNTH-REC-0007"
+kind = "discharge note"
+
+[[job]]
+id = "review_meds"
+text = "Review discharge medicines"
+depends_on = []
+owner = "SYNTH-dr-01"
+due = "1936-05-02 10:00"
+safety_critical = true
+agent_doable = false
+source_line = 1
+
+[[job]]
+id = "write_summary"
+text = "Write discharge summary"
+depends_on = ["review_meds"]
+owner = "SYNTH-dr-01"
+due = "1936-05-02 12:00"
+safety_critical = false
+agent_doable = true
+source_line = 2
+
+[[job]]
+id = "book_followup"
+text = "Book follow-up clinic"
+depends_on = []
+owner = "SYNTH-clerk-01"
+due = "1936-05-02 12:00"
+safety_critical = false
+agent_doable = true
+source_line = 3
+
+[[job]]
+id = "remove_cannula"
+text = "Remove cannula"
+depends_on = []
+owner = "SYNTH-rn-01"
+due = "1936-05-02 13:00"
+safety_critical = true
+agent_doable = false
+source_line = 4
+disciplines = ["nursing", "medicine"]
+
+[[job]]
+id = "teach_meds"
+text = "Explain new medicines to the patient"
+depends_on = ["review_meds"]
+owner = "SYNTH-rn-01"
+due = "1936-05-02 13:00"
+safety_critical = false
+agent_doable = false
+source_line = 5
+
+[[job]]
+id = "send_summary"
+text = "Send summary to family doctor"
+depends_on = ["write_summary"]
+owner = "SYNTH-clerk-01"
+due = "1936-05-02 14:00"
+safety_critical = false
+agent_doable = true
+source_line = 6
+
+[[job]]
+id = "discharge"
+text = "Patient leaves the ward"
+depends_on = ["send_summary", "book_followup", "remove_cannula", "teach_meds"]
+owner = "SYNTH-dr-01"
+due = "1936-05-02 15:00"
+safety_critical = true
+agent_doable = false
+source_line = 7

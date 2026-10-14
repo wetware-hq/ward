@@ -1,0 +1,18 @@
+# FAKE fixture for scorer unit tests only. Not a scenario.
+list_id = "FAKE-list"
+version = "1"
+source_lines = 1
+
+[[record]]
+id = "SYNTH-FAKE-REC-1"
+kind = "fake record"
+
+[[job]]
+id = "fake_job"
+text = "Do the fake job"
+depends_on = []
+owner = "SYNTH-fake-owner"
+due = "1930-01-01 10:00"
+safety_critical = false
+agent_doable = true
+source_line = 1

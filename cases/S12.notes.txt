@@ -1,0 +1,3 @@
+# Synthetic clinician note lines for S12, read from stack_truth (do not edit by hand).
+L3	Medicines	paracetamol 1 g four times a day oral for 5 days
+L4	Actions	family doctor review in 1 week, GP

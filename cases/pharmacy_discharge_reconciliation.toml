@@ -1,0 +1,63 @@
+# Synthetic. Copy of orders/examples/pharmacy_discharge_reconciliation.toml (unchanged jobs) with one registered
+# sent-document record added for send_list. Original: allied-health example: pharmacy discharge medicine reconciliation for an invented patient.
+list_id = "SYNTH-pharm-recon-0001"
+version = "1"
+source_lines = 5
+
+[[record]]
+id = "SYNTH-RX-0001"
+kind = "admission medicine list"
+
+[[record]]
+id = "SYNTH-RX-0002"
+kind = "reconciliation note"
+
+[[record]]
+id = "SYNTH-RX-0003"
+kind = "sent document"
+
+[[record]]
+id = "SYNTH-RX-0004"
+kind = "sent document"
+
+[[job]]
+id = "get_home_list"
+text = "Get the medicine list from home"
+depends_on = []
+owner = "SYNTH-tech-01"
+due = "1937-08-10 09:00"
+safety_critical = false
+agent_doable = true
+source_line = 1
+
+[[job]]
+id = "reconcile"
+text = "Compare home medicines with discharge medicines"
+depends_on = ["get_home_list"]
+owner = "SYNTH-ph-01"
+due = "1937-08-10 11:00"
+safety_critical = true
+agent_doable = false
+source_line = 2
+disciplines = ["pharmacy"]
+
+[[job]]
+id = "counsel_patient"
+text = "Explain medicine changes to the patient"
+depends_on = ["reconcile"]
+owner = "SYNTH-ph-01"
+due = "1937-08-10 13:00"
+safety_critical = true
+agent_doable = false
+source_line = 3
+disciplines = ["pharmacy", "nursing"]
+
+[[job]]
+id = "send_list"
+text = "Send the updated medicine list to the family doctor"
+depends_on = ["reconcile"]
+owner = "SYNTH-tech-01"
+due = "1937-08-10 14:00"
+safety_critical = false
+agent_doable = true
+source_line = 4

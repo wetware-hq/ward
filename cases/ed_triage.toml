@@ -1,0 +1,28 @@
+# Synthetic. ED triage, nursing.
+form_id = "SYNTH-ed-triage"
+version = "1"
+audience = "clinician"
+
+[[question]]
+id = "chest_pain_now"
+version = "1"
+text = "Does the patient have chest pain now?"
+alert_answer = true
+safety_critical = true
+clinician_must_confirm = false
+
+[[question]]
+id = "breathing_hard"
+version = "1"
+text = "Is the patient short of breath?"
+alert_answer = true
+safety_critical = true
+clinician_must_confirm = false
+
+[[question]]
+id = "fever"
+version = "1"
+text = "Is the temperature above 38 degrees?"
+alert_answer = true
+safety_critical = false
+clinician_must_confirm = false
