@@ -1,4 +1,4 @@
-# Synthetic. Mental-health screen the patient fills in with their assistant (3 questions).
+# Synthetic. Mental-health screen the patient fills in with their assistant (3 questions; text from the S05 answer file's form_questions).
 form_id = "SYNTH-mh-screen"
 version = "1"
 audience = "patient"
@@ -6,7 +6,7 @@ audience = "patient"
 [[question]]
 id = "mh_q1"
 version = "1"
-text = "Have you felt low on most days in the last two weeks?"
+text = "Have you felt low in mood on most days in the past two weeks?"
 alert_answer = true
 safety_critical = false
 clinician_must_confirm = false
@@ -14,7 +14,7 @@ clinician_must_confirm = false
 [[question]]
 id = "mh_q2"
 version = "1"
-text = "Have you had thoughts of harming yourself?"
+text = "Have you had thoughts of harming yourself in the past two weeks?"
 alert_answer = true
 safety_critical = true
 clinician_must_confirm = false
@@ -22,7 +22,7 @@ clinician_must_confirm = false
 [[question]]
 id = "mh_q3"
 version = "1"
-text = "Have you had trouble sleeping?"
+text = "Have you had trouble sleeping in the past two weeks?"
 alert_answer = true
 safety_critical = false
 clinician_must_confirm = false

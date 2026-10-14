@@ -256,11 +256,11 @@ def adversarial_refuse(h, truth):
     return ok, d
 
 
-def scenario_tests(h, truth, results=None):
+def scenario_tests(h, truth, art=None):
     """Extra scripted tests declared in the truth file. Each needs a stack implementation; until it has one it
     fails as not implemented (never a silent pass)."""
     from .scenario_tests import run_declared
-    res = run_declared(truth.get("scenario_id", ""), truth.get("scenario_tests", []), h)
+    res = run_declared(truth.get("scenario_id", ""), truth.get("scenario_tests", []), h, art)
     bad = [k for k, v in res.items() if v is not True]
     return not bad, {"results": res}
 
@@ -421,7 +421,7 @@ def score(h, art, truth, adversarial, rerun):
     out["safety_lines"] = safety_lines(h, art, truth)
     out["must_refuse"] = must_refuse(h, truth)
     out["adversarial_refuse"] = adversarial_refuse(h, truth)
-    out["scenario_tests"] = scenario_tests(h, truth)
+    out["scenario_tests"] = scenario_tests(h, truth, art)
     out["cites_logged"] = cites_logged(h, art)
     out["replay"] = replay(h, art, rerun)
     out["no_leaks"] = no_leaks(h)
