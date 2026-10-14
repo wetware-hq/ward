@@ -190,14 +190,6 @@ def outputs(h, art, truth):
             else:
                 want = row.get("value") or tmpl
                 ok = bool(want) and _fill_match(want, surf)
-        elif sec.startswith("cut from clinician letter"):
-            # sensitive answer: exported with its value (forms), absent from the clinician letter, and kept
-            # word for word in the patient letter (scenario test T3 checks the wording)
-            fs = [f for f in art.get("facts", []) if f.get("item_id") == item]
-            want = {"yes": True, "no": False}.get(str(row.get("value", "")).lower(), row.get("value"))
-            clin = (art.get("clinician_letter") or {}).get("letter", "")
-            ok = bool(fs) and fs[-1]["status"] == row.get("status", "answered") and fs[-1]["value"] == want \
-                and hit is not None and hit[2].q[item]["text"].rstrip("?") not in clin
         elif sec.startswith("patient view:"):
             ok = sec.split(":", 1)[1].strip() in views
         elif sec == "gallery" or t == "figure":

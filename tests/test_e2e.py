@@ -7,9 +7,8 @@ from stack import pipeline, scorer
 
 RUN_ALL = os.environ.get("STACK_RUN_TRACES") == "1"
 KNOWN_RED = {
-    "S05-mh-screen-by-patient-agent": "scenario test S05-T5 (paraphrase on a sensitive step) is pending review",
-    "S06b-sdm-on-behalf-au": "forms now refuses on_behalf from a patient session with PV-CARE-TEAM-STEP; truth expects RF-ROLE-CONFIRM",
-    "S12-patient-declines-safety-question-to-letter-with-privacy-line": "form_answer:allergy_any missing; letter safety lines (letters job)",
+    "S05-mh-screen-by-patient-agent": "form_answer:mh_q2 needs a scorer check that fails on \"Yes\" in the GP letter (room ruling); S05-T5 pending review",
+    "S12-patient-declines-safety-question-to-letter-with-privacy-line": "waits on letters (privacy line, PRIVACY_BLOCKED refusals) and Physician's C15/allergy_any ruling; declined route scored in test_trace_negatives",
 }
 
 
@@ -18,7 +17,7 @@ def test_trace(sid, tmp_path):
     if scorer.load_truth(sid) is None:
         pytest.skip(scorer.PENDING)
     if sid in KNOWN_RED and not RUN_ALL:
-        pytest.skip("known red, outside stack: " + KNOWN_RED[sid])
+        pytest.skip("known red: " + KNOWN_RED[sid])
     r = pipeline.evaluate(sid, str(tmp_path))
     failed = {k: d for k, (ok, d) in r["criteria"].items() if not ok}
     assert not failed, failed

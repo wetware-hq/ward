@@ -292,21 +292,6 @@ def test_queue_slot_needs_forms_item(monkeypatch):
     assert not scorer.outputs(h, {"tool": "letters"}, {"expected_outputs": [row]})[0]
 
 
-def test_sensitive_answer_cut_from_clinician_letter(monkeypatch):
-    row = {"type": "form_answer", "item": "c", "value": "Yes", "status": "answered",
-           "expected_section": "cut from clinician letter (dropped list only); kept word for word in any patient letter"}
-    fact = {"item_id": "c", "status": "answered", "value": True}
-    art = lambda facts, clin="Safe text": {"tool": "letters", "letter": "pt", "facts": facts, "clinician_letter": {"letter": clin}}
-    assert out_rows(monkeypatch, [row], art=art([fact]))[0]
-    assert not out_rows(monkeypatch, [row], art=art([fact], "says Harm here"))[0]
-    assert not out_rows(monkeypatch, [row], art=art([dict(fact, value=False)]))[0]
-    assert not out_rows(monkeypatch, [row], art=art([dict(fact, status="declined")]))[0]
-    assert not out_rows(monkeypatch, [row], art=art([]))[0]
-    assert out_rows(monkeypatch, [dict(row, value="No")], art=art([dict(fact, value=False)]))[0]
-    assert not out_rows(monkeypatch, [dict(row, item="zz")], art=art([dict(fact, item_id="zz")]))[0]
-    assert out_rows(monkeypatch, [row], art=art([dict(fact, value=False), fact]))[0]       # the last fact counts
-
-
 def test_artifact_text_includes_clinician_letter():
     assert scorer._artifact_text({"letter": "A", "clinician_letter": {"letter": "B"}}) == "A\nB"
     assert scorer._artifact_text({"legends": "L"}) == "L"
