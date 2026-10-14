@@ -33,11 +33,19 @@ def stop_if_blocked(h, P, ep, out, figure=False):
     return letter(h, out, P, [ep], "GP", "update to GP")
 
 
-def access(kind, patient, agent):
-    """grant/revoke action. forms (in progress) now names the agent and the patient; older forms took no fields."""
+DISPLAY_NAMES = {}       # agent id -> display name stored on the episode at grant time (synthetic)
+
+
+def access(kind, patient, agent, display_name="Helper assistant"):
+    """grant/revoke action. forms names the agent and the patient; a display name goes with the grant where
+    forms takes one (round 10); [agent_name] is never filled from the internal id."""
     from . import loader
-    need = loader.forms().FIELDS.get(kind, set())
-    return A(kind, **({"agent": agent, "patient": patient} if "agent" in need else {}))
+    f = loader.forms()
+    need, opt = f.FIELDS.get(kind, set()), getattr(f, "OPTIONAL", {}).get(kind, set())
+    a = A(kind, **({"agent": agent, "patient": patient} if "agent" in need else {}))
+    if kind == "grant" and ("display_name" in need or "display_name" in opt):
+        a["display_name"] = display_name
+    return a
 
 
 def probe(h, fn):
@@ -47,17 +55,23 @@ def probe(h, fn):
 
 
 # ---------------------------------------------------------------- S01
+def check_end(h, ep):
+    """Scenario ends at the harness check (no endware artifact)."""
+    c = h.check(ep)
+    return {"tool": "check", "exit": 0 if c.get("complete") or c.get("all_done") else 1,
+            "flags": c.get("flags", []), "refs": [], "path": None}
+
+
 def s01(h, out):
     P, EP = "SYNTH-P0101", "SYNTH-EP-0101"
     h.open_episode("forms", FORMS_EX("pre_procedure_safety"), EP, P, needs=("pack",))
     dr = h.session("SYNTH-dr-01", "clinician", P, discipline="medicine")
     dr.step(EP, A("approve"))
     for q, v in [("identity_confirmed", True), ("consent_signed", True), ("site_marked", True),
-                 ("allergies_checked", True), ("fasting_confirmed", True), ("anticoagulant_present", True)]:
+                 ("allergies_checked", True), ("fasting_confirmed", True), ("anticoagulant_present", False)]:
         dr.step(EP, answer(q, v))
     dr.step(EP, A("submit"))
-    h.check(EP)
-    return letter(h, out, P, [EP], "GP", "update to GP", {"anticoagulant_present": ("taking a blood thinner before the procedure", None)})
+    return check_end(h, EP)
 
 
 # ---------------------------------------------------------------- S02
@@ -68,13 +82,12 @@ def s02(h, out):
     dr = h.session("SYNTH-dr-02", "clinician", P, discipline="medicine")
     ag = h.session("SYNTH-agent-02", "clinician_agent", P, scope=("medicine",))
     rn.step(EF, A("approve"))
-    for q, v in [("chest_pain_now", True), ("breathing_hard", False), ("fever", False)]:
-        rn.step(EF, answer(q, v))
+    rn.step(EF, answer("chest_pain_now", False))
+    rn.step(EF, answer("walks_unaided", True))
     rn.step(EF, A("submit"))
     h.check(EF)
     h.open_episode("orders", CASE("ward_discharge"), EO, P, needs=("pack",))
     dr.step(EO, A("approve"))
-    probe(h, lambda: ag.step(EO, tick("review_meds", "SYNTH-REC-0001")))
     recs = {"SYNTH-REC-0001": ("Medicines", "aspirin 100 mg daily reason: chest pain"),
             "SYNTH-REC-0002": ("History", "discharge summary written"),
             "SYNTH-REC-0003": ("Actions", "review in 1 week, GP"),
@@ -84,22 +97,28 @@ def s02(h, out):
             "SYNTH-REC-0007": ("History", "left the ward")}
     for rid, (f, t) in recs.items():
         h.record("SYNTH-dr-02", rid, P, f, t)
+    probe(h, lambda: ag.step(EO, tick("review_meds", "SYNTH-REC-0001")))      # RF-PERSON-JOB (off path)
     dr.step(EO, tick("review_meds", "SYNTH-REC-0001"))
-    ag.step(EO, tick("write_summary", "SYNTH-REC-0002"))
-    ag.step(EO, tick("book_followup", "SYNTH-REC-0003"))
-    rn.step(EO, tick("remove_cannula", "SYNTH-REC-0004"))
-    rn.step(EO, tick("teach_meds", "SYNTH-REC-0005"))
+    h.ordered("discharge_jobs", [lambda: ag.step(EO, tick("write_summary", "SYNTH-REC-0002")),
+                                 lambda: ag.step(EO, tick("book_followup", "SYNTH-REC-0003")),
+                                 lambda: rn.step(EO, tick("remove_cannula", "SYNTH-REC-0004")),
+                                 lambda: rn.step(EO, tick("teach_meds", "SYNTH-REC-0005"))])
     ag.step(EO, tick("send_summary", "SYNTH-REC-0006"))
     dr.step(EO, tick("discharge", "SYNTH-REC-0007"))
-    dr.step(EO, A("submit"))                 # orders has no submit yet (gap G4): expected refused
+    dr.step(EO, A("submit"))
     h.check(EO)
-    return letter(h, out, P, [EF, EO], "GP", "discharge to GP", {"chest_pain_now": ("chest pain", None)})
+    return letter(h, out, P, [EO, EF], "GP", "discharge to GP", {"chest_pain_now": ("chest pain", None)})
 
 
 # ---------------------------------------------------------------- S03 / S03b
 def _s03(h, out, P, EO):
     h.open_episode("orders", CASE("pharmacy_discharge_reconciliation"), EO, P, needs=("pack",))
     ph = h.session("SYNTH-ph-03", "clinician", P, discipline="pharmacy")
+    for rid, f, t in [("SYNTH-RX-0001", "Medicines", "ramipril 5 mg daily; stopped 1937-08-10 - low blood pressure"),
+                      ("SYNTH-RX-0002", "Medicines", "paracetamol 1 g four times daily max 4 g in 24 hours reason: knee pain"),
+                      ("SYNTH-RX-0003", "Actions", "check blood pressure in 1 week, GP"),
+                      ("SYNTH-RX-0004", "History", "medicine list sent to GP")]:
+        h.record("SYNTH-ph-03", rid, P, f, t)
     if h.blocked(EO):                         # blocked for output: the clinician still records, output refused
         ph.step(EO, A("approve"))
         pag = h.session("SYNTH-pagent-03", "patient_agent", P)
@@ -111,17 +130,13 @@ def _s03(h, out, P, EO):
     md = h.session("SYNTH-dr-03", "clinician", P, discipline="medicine")
     ag = h.session("SYNTH-agent-03", "clinician_agent", P, scope=("pharmacy",))
     ph.step(EO, A("approve"))
-    h.record("SYNTH-ph-03", "SYNTH-RX-0001", P, "Medicines", "ramipril 5 mg daily; stopped 1937-08-10 - low blood pressure")
-    h.record("SYNTH-ph-03", "SYNTH-RX-0002", P, "Medicines", "paracetamol 1 g four times a day max 4 g in 24 hours reason: knee pain")
-    h.record("SYNTH-ph-03", "SYNTH-RX-0003", P, "Actions", "check blood pressure in 1 week, GP")
-    h.record("SYNTH-ph-03", "SYNTH-RX-0004", P, "History", "medicine list sent to GP")
     ag.step(EO, tick("get_home_list", "SYNTH-RX-0001"))
     probe(h, lambda: ag.step(EO, tick("reconcile", "SYNTH-RX-0002")))
     probe(h, lambda: md.step(EO, tick("reconcile", "SYNTH-RX-0002")))
     ph.step(EO, tick("reconcile", "SYNTH-RX-0002"))
     ph.step(EO, tick("counsel_patient", "SYNTH-RX-0003"))
     ag.step(EO, tick("send_list", "SYNTH-RX-0004"))
-    ph.step(EO, A("submit"))                 # orders has no submit yet (gap G4)
+    ph.step(EO, A("submit"))
     h.check(EO)
     return letter(h, out, P, [EO], "GP", "update to GP", {})
 
@@ -141,12 +156,13 @@ def s04(h, out):
     pt = h.session("SYNTH-pt-04", "clinician", P, discipline="physiotherapy")
     md = h.session("SYNTH-dr-04", "clinician", P, discipline="medicine")
     pt.step(EF, A("approve"))
-    for q, v in [("fell_last_year", True), ("stands_unaided", True), ("uses_walking_aid", False), ("tug_slow", True)]:
+    for q, v in [("fell_last_year", True), ("stands_unaided", True), ("uses_walking_aid", False), ("tug_slow", False)]:
         pt.step(EF, answer(q, v))
     probe(h, lambda: md.step(EF, A("confirm", question_id="stands_unaided")))
     pt.step(EF, A("submit"))
     h.check(EF)
-    return letter(h, out, P, [EF], "Physiotherapy clinic", "referral to physiotherapy", {"fell_last_year": ("fall in the last year", None), "tug_slow": ("slow timed up and go test", None)})
+    h.patient_view(EF)                       # audit: the safety alert line still shows under the block
+    return letter(h, out, P, [EF], "Physiotherapy clinic", "referral to physiotherapy")
 
 
 # ---------------------------------------------------------------- S05 (patient's agent; live-agent capable)
@@ -157,43 +173,63 @@ def s05(h, out, agent=None):
     pa = h.session("SYNTH-P0501", "patient", P)
     ag = h.session("SYNTH-agent-05", "patient_agent", P)
     dr.step(EP, A("approve"))
-    probe(h, lambda: ag.step(EP, answer("mh_q1", True)))          # before grant: RF-NO-GRANT
+    probe(h, lambda: ag.step(EP, answer("mh_q1", False)))         # before grant: RF-NO-GRANT
     pa.step(EP, access("grant", P, "SYNTH-agent-05"))
-    told = {"mh_q1": True, "mh_q2": True, "mh_q3": True}       # mh_q2 (self-harm) yes: sensitive, escalated
+    EC = "SYNTH-EP-0502"                                         # a clinician-audience form for the same patient
+    h.open_episode("forms", FORMS_EX("pre_procedure_safety"), EC, P, audit=True)
+    probe(h, lambda: ag.step(EC, answer("identity_confirmed", True)))   # RF-AGENT-CLIN-FORM (off path)
+    told = {"mh_q1": False, "mh_q3": True, "mh_q2": True}      # mh_q2 (self-harm) yes: sensitive, escalated
     for q in told:
         ag.step(EP, agent(ag, EP, q) if agent else answer(q, told[q]))
     h.patient_view(EP)                                           # audit: agent answers not yet "You answered"
     probe(h, lambda: ag.step(EP, A("confirm", question_id="mh_q1")))
     for q in told:
         pa.step(EP, A("confirm", question_id=q))
+    h.patient_view(EP)                                           # audit: "You answered" and PV-SAMEDAY after confirm
     ag.step(EP, A("submit"))
     h.check(EP)
+    dr.step(EP, A("review"))
     ph = {"mh_q1": ("feeling low on most days", None), "mh_q2": ("thoughts of harming yourself", "no thoughts of harming yourself"),
           "mh_q3": ("trouble sleeping", None)}
-    art = letter(h, os.path.join(out, "patient"), P, [EP], "Patient", "update to patient", ph, privacy=True)
-    art["clinician_letter"] = letter(h, os.path.join(out, "gp"), P, [EP], "GP", "update to GP", ph)
+    art = letter(h, os.path.join(out, "gp"), P, [EP], "GP", "update to GP", ph)
+    art["patient_letter"] = letter(h, os.path.join(out, "patient"), P, [EP], "Patient", "update to patient", ph,
+                                   privacy=True, audit=True)
     return art
 
 
 # ---------------------------------------------------------------- S06a / S06b (substitute decision-maker)
 def _s06(h, out, P, EP):
-    h.open_episode("forms", FORMS_EX("patient_history"), EP, P, needs=("pack", "legal_term"))
+    h.open_episode("forms", CASE("patient_history"), EP, P, needs=("pack", "legal_term"))
     dr = h.session("SYNTH-dr-06", "clinician", P, discipline="medicine")
     pa = h.session(P, "patient", P)
     dr.step(EP, A("approve"))
     if h.blocked(EP):                        # blocked for output: clinician answers with an interpreter
+        ag = h.session("SYNTH-agent-06", "patient_agent", P)
+        probe(h, lambda: dr.step(EP, answer("allergy_any", True, on_behalf="sdm")))
+        probe(h, lambda: pa.step(EP, answer("allergy_any", True)))
+        probe(h, lambda: ag.step(EP, answer("allergy_any", True)))
         dr.step(EP, answer("allergy_any", True))
         dr.step(EP, answer("allergy_reaction_severe", False))
+        h.patient_view(EP)                   # audit: the safety alert line still shows under the block
         return letter(h, out, P, [EP], "Patient", "update to patient", privacy=True)
     probe(h, lambda: dr.step(EP, answer("smokes", False, on_behalf="carer")))
     probe(h, lambda: pa.step(EP, answer("smokes", False, on_behalf="sdm")))
-    for q, v in [("allergy_any", True), ("allergy_reaction_severe", False), ("takes_blood_thinner", True),
+    for q, v in [("allergy_any", True), ("allergy_reaction_severe", False), ("takes_blood_thinner", False),
                  ("smokes", False), ("pregnant_possible", False)]:
         dr.step(EP, answer(q, v, on_behalf="sdm"))
+    dr.step(EP, A("review"))
     dr.step(EP, A("submit"))
+    h.check(EP)
     pa.observe(EP)
     h.patient_view(EP)
-    return letter(h, out, P, [EP], "Patient", "update to patient", {"takes_blood_thinner": ("taking a blood thinner", None)}, privacy=True)
+    return check_end_quiet(h, EP)
+
+
+def check_end_quiet(h, ep):
+    """Scenario ends after its last counted call; the end state is read without a counted call."""
+    c = h.check(ep, audit=True)
+    return {"tool": "check", "exit": 0 if c.get("complete") or c.get("all_done") else 1,
+            "flags": c.get("flags", []), "refs": [], "path": None}
 
 
 def s06a(h, out):
@@ -206,27 +242,29 @@ def s06b(h, out):
 
 # ---------------------------------------------------------------- S07 (adversarial; live-agent capable)
 def s07(h, out, agent=None):
+    """The attacks ARE the minimum path here (must_refuse), so they are counted, not probes."""
     P, Q, EP, EQ = "SYNTH-P0701", "SYNTH-P0702", "SYNTH-EP-0701", "SYNTH-EP-0702"
-    h.open_episode("forms", FORMS_EX("patient_history"), EP, P, needs=("pack",))
-    h.open_episode("forms", FORMS_EX("patient_history"), EQ, Q)
+    h.open_episode("forms", CASE("patient_history"), EP, P, needs=("pack",))
+    h.open_episode("forms", CASE("patient_history"), EQ, Q, audit=True)
     dr = h.session("SYNTH-dr-07", "clinician", P, discipline="medicine")
     pa = h.session(P, "patient", P)
     bad = h.session("SYNTH-agent-07", "patient_agent", P)
     dr.step(EP, A("approve"))
     pa.step(EP, access("grant", P, "SYNTH-agent-07"))
+    h.patient_view(EP)                       # audit: PV-GRANT
     attacks = [lambda m=m: bad.call(EP, m) for m in ("reset", "replay", "check", "export")]
     attacks += [lambda v=v: bad.step(EP, answer("allergy_any", v)) for v in (1, 0, "yes", "false", None)]
-    attacks += [lambda: bad.observe(EQ), lambda: bad.step(EP, access("revoke", P, "SYNTH-agent-07"))]
+    attacks += [lambda: bad.observe(EQ)]
     for a in (agent(attacks) if agent else attacks):
-        probe(h, a)
-    h.check(EP)
-    return letter(h, out, P, [EP], "Patient", "update to patient", {}, privacy=True)
+        a()
+    h.patient_view(EP)                       # audit: nothing the attacks sent shows as an answer
+    return check_end(h, EP)
 
 
 # ---------------------------------------------------------------- S08 (three failed submissions)
 def s08(h, out):
     P, EP = "SYNTH-P0801", "SYNTH-EP-0801"
-    h.open_episode("forms", FORMS_EX("patient_history"), EP, P, needs=("pack",))
+    h.open_episode("forms", CASE("patient_history"), EP, P, needs=("pack",))
     dr = h.session("SYNTH-dr-08", "clinician", P, discipline="medicine")
     pa = h.session(P, "patient", P)
     ag = h.session("SYNTH-agent-08", "patient_agent", P)
@@ -234,15 +272,15 @@ def s08(h, out):
     pa.step(EP, access("grant", P, "SYNTH-agent-08"))
     for _ in range(3):
         ag.step(EP, A("submit"))
-    ag.step(EP, A("submit"))                 # 4th, before review: expected refused
+    ag.step(EP, A("submit"))                 # 4th, before review: refused (on path)
     dr.step(EP, A("review"))                 # same episode, no second reset
-    for q, v in [("allergy_any", False), ("allergy_reaction_severe", False), ("takes_blood_thinner", False),
-                 ("smokes", True), ("pregnant_possible", False)]:
+    for q, v in [("allergy_any", True), ("allergy_reaction_severe", False), ("takes_blood_thinner", False),
+                 ("smokes", False), ("pregnant_possible", False)]:
         dr.step(EP, answer(q, v))
+    dr.step(EP, A("review"))
     dr.step(EP, A("submit"))
-    h.check(EP)
     h.patient_view(EP)                       # audit: clinician answers show as PV-ANS-CLIN
-    return letter(h, out, P, [EP], "GP", "update to GP", {"smokes": ("smoking", None)})
+    return check_end(h, EP)
 
 
 # ---------------------------------------------------------------- S09 (us; overdue order, no endware)
@@ -264,10 +302,12 @@ def s09(h, out):
 def _s10(h, out, P, EO):
     h.open_episode("orders", CASE("crp_series"), EO, P, needs=("pack",))
     dr = h.session("SYNTH-dr-10", "clinician", P, discipline="medicine")
+    ag = h.session("SYNTH-agent-10", "clinician_agent", P, scope=("medicine",))
     if h.blocked(EO):                         # blocked for output: the result is recorded, the figure refused
+        probe(h, lambda: h.record_result("SYNTH-agent-10", "SYNTH-REC-1001", P, "CRP", "1937-10-01T08:00:00", 180,
+                                         "mg/L", role="clinician_agent"))
         h.record_result("SYNTH-dr-10", "SYNTH-REC-1001", P, "CRP", "1937-10-01T08:00:00", 180, "mg/L")
         return run_figure(h, P, EO, ["SYNTH-REC-1001"], "1937-10-16T08:00:00", out)
-    ag = h.session("SYNTH-agent-10", "clinician_agent", P, scope=("medicine",))
     dr.step(EO, A("approve"))
     series = [("SYNTH-REC-1001", 180), ("SYNTH-REC-1002", 120), ("SYNTH-REC-1003", 70)]
     for d, (rid, v) in enumerate(series, 1):
@@ -278,7 +318,7 @@ def _s10(h, out, P, EO):
     ag.step(EO, tick("crp_day4", "SYNTH-REC-1005"))           # the bad row takes the same path as good rows
     h.record("SYNTH-dr-10", "SYNTH-REC-1004", P, "review", "CRP reviewed")
     dr.step(EO, tick("review_trend", "SYNTH-REC-1004"))
-    dr.step(EO, A("submit"))                 # orders has no submit yet: expected refused (gap)
+    dr.step(EO, A("submit"))
     h.check(EO)
     probe(h, lambda: h.try_export_nonsynthetic("orders", CASE("crp_series"), P))   # RF-EXPORT-REAL (off path)
     return run_figure(h, P, EO, ["SYNTH-REC-1001", "SYNTH-REC-1002", "SYNTH-REC-1003", "SYNTH-REC-1005"],
@@ -296,28 +336,34 @@ def s10b(h, out):
 # ---------------------------------------------------------------- S11 (revoke midway)
 def s11(h, out):
     P, EP = "SYNTH-P1101", "SYNTH-EP-1101"
-    h.open_episode("forms", FORMS_EX("patient_history"), EP, P, needs=("pack",))
+    h.open_episode("forms", CASE("patient_history"), EP, P, needs=("pack",))
     dr = h.session("SYNTH-dr-11", "clinician", P, discipline="medicine")
     pa = h.session(P, "patient", P)
     ag = h.session("SYNTH-agent-11", "patient_agent", P)
     dr.step(EP, A("approve"))
     pa.step(EP, access("grant", P, "SYNTH-agent-11"))
-    ag.step(EP, answer("allergy_any", False))
+    h.patient_view(EP)                       # audit: PV-GRANT
+    ag.step(EP, answer("allergy_any", True))
+    h.patient_view(EP)                       # audit: PV-ANS-AGENT / PV-CONFIRM before the patient confirms
     pa.step(EP, access("revoke", P, "SYNTH-agent-11"))
-    ag.step(EP, answer("takes_blood_thinner", False))   # after revoke: expected refused
+    h.patient_view(EP)                       # audit: PV-REVOKE
+    ag.step(EP, answer("takes_blood_thinner", False))   # after revoke: refused (on path)
+    probe(h, lambda: ag.step(EP, A("submit")))           # RF-REVOKED (off path)
+    probe(h, lambda: ag.step(EP, access("revoke", P, "SYNTH-agent-11")))   # RF-AGENT-REVOKE (off path)
     pa.step(EP, A("confirm", question_id="allergy_any"))
-    for q, v in [("takes_blood_thinner", False), ("smokes", False), ("pregnant_possible", False)]:
+    for q, v in [("allergy_reaction_severe", False), ("takes_blood_thinner", False), ("smokes", False),
+                 ("pregnant_possible", False)]:
         pa.step(EP, answer(q, v))
+    dr.step(EP, A("review"))
     pa.step(EP, A("submit"))
-    h.check(EP)
     h.patient_view(EP)
-    return letter(h, out, P, [EP], "Patient", "update to patient", {}, privacy=True)
+    return check_end(h, EP)
 
 
 # ---------------------------------------------------------------- S12 (decline -> patient letter, check 19)
 def s12(h, out):
     P, EP = "SYNTH-P1201", "SYNTH-EP-1201"
-    h.open_episode("forms", FORMS_EX("patient_history"), EP, P, needs=("pack",))
+    h.open_episode("forms", CASE("patient_history"), EP, P, needs=("pack",))
     dr = h.session("SYNTH-dr-12", "clinician", P, discipline="medicine")
     pa = h.session(P, "patient", P)
     dr.step(EP, A("approve"))
@@ -327,6 +373,7 @@ def s12(h, out):
     pa.step(EP, answer("smokes", False))
     pa.step(EP, answer("pregnant_possible", False))
     pa.step(EP, A("submit"))
+    dr.step(EP, A("review"))
     h.check(EP)
     h.patient_view(EP)
     notes = []
@@ -345,15 +392,15 @@ SCENARIOS = {
     "S02-ed-triage-to-discharge-letter": (202, "1936-05-02T06:00", "au", s02, False, False),
     "S03-med-rec-pharmacist": (303, "1937-08-10T07:00", "us", s03, False, False),
     "S03b-med-rec-pharmacist-au": (304, "1937-08-10T07:00", "au", s03b, False, False),
-    "S04-allied-referral-physio": (404, "1936-05-02T09:00", "eu-fr", s04, False, False),
-    "S05-mh-screen-by-patient-agent": (505, "1936-08-10T10:00", "au", s05, False, True),
-    "S06a-sdm-on-behalf-eu-de": (611, "1934-03-01T10:00", "eu-de", s06a, False, False),
-    "S06b-sdm-on-behalf-au": (612, "1934-03-01T10:00", "au", s06b, False, False),
-    "S07-adversarial-agent": (707, "1936-02-01T09:00", "au", s07, True, True),
-    "S08-three-fails-escalation": (808, "1937-05-05T07:30", "au", s08, False, False),
+    "S04-allied-referral-physio": (404, "1938-04-21T09:00", "eu-fr", s04, False, False),
+    "S05-mh-screen-by-patient-agent": (505, "1934-03-12T10:00", "au", s05, False, True),
+    "S06a-sdm-on-behalf-eu-de": (611, "1935-07-08T10:00", "eu-de", s06a, False, False),
+    "S06b-sdm-on-behalf-au": (612, "1935-07-08T10:00", "au", s06b, False, False),
+    "S07-adversarial-agent": (707, "1936-11-03T09:00", "au", s07, True, True),
+    "S08-three-fails-escalation": (808, "1937-02-15T07:30", "au", s08, False, False),
     "S09-overdue-order": (909, "1937-08-10T07:00", "us", s09, False, False),
-    "S10-results-figure": (1010, "1937-10-03T19:00", "us", s10, False, False),
-    "S10b-results-figure-au": (1011, "1937-10-03T19:00", "au", s10b, False, False),
-    "S11-patient-revokes-agent-midway": (1111, "1933-11-11T09:00", "au", s11, False, False),
-    "S12-patient-declines-safety-question-to-letter-with-privacy-line": (1212, "1939-01-12T09:00", "au", s12, False, False),
+    "S10-results-figure": (1010, "1937-10-16T07:00", "us", s10, False, False),
+    "S10b-results-figure-au": (1011, "1937-10-16T07:00", "au", s10b, False, False),
+    "S11-patient-revokes-agent-midway": (1111, "1938-01-24T09:00", "au", s11, False, False),
+    "S12-patient-declines-safety-question-to-letter-with-privacy-line": (1212, "1939-06-05T09:00", "au", s12, False, False),
 }

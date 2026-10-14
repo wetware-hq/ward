@@ -19,6 +19,14 @@ def pack_exists(pack):
     return os.path.isdir(os.path.join(WORKSPACE, "letters", "locale", pack))
 
 
+LANG_CODES = {"english": "en", "german": "de", "french": "fr"}
+
+
+def lang_code(language):
+    """Answer files name languages ("English"); the locale layer uses codes ("en")."""
+    return LANG_CODES.get(str(language).strip().lower(), str(language).strip().lower())
+
+
 def signed_languages():
     """Every signed patient line in forms, orders and letters is English today."""
     return {"en"}
@@ -45,9 +53,14 @@ def line(block_id, **f):
         f.setdefault("locale", f["locale pack"])
     if "event_id" in f:
         f.setdefault("event id", f["event_id"])
+    if "agent_name" in f and INTERNAL_ID.search(str(f["agent_name"])):
+        raise ValueError("refused: [agent_name] is filled only from the display name stored at grant time, never an id")
     for k, v in f.items():
         t = t.replace(f"[{k}]", str(v))
     return t
+
+
+INTERNAL_ID = re.compile(r"\bSYNTH-[\w-]+|\b[0-9a-f]{8,}\b|\bagent[-_]\w+", re.I)
 
 
 def signed(line_id):

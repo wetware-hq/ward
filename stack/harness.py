@@ -62,9 +62,10 @@ class Handle:
 class Harness:
     NOTE_HOOK = None      # tests only: callable(record) -> reason text for a scripted actor's note, or None
     def __init__(self, scenario_id, seed, start="1937-03-01T08:00", pack="au", language="en"):
-        self.scenario_id, self.seed, self.pack, self.language = scenario_id, seed, pack, language
+        self.scenario_id, self.seed, self.pack, self.language = scenario_id, seed, pack, locales.lang_code(language)
         self.rng = random.Random(seed)
-        self.clock = datetime.datetime.fromisoformat(start) + datetime.timedelta(minutes=self.rng.randrange(0, 30))
+        self.clock = datetime.datetime.fromisoformat(start)      # fixture clock: never moved by the seed
+        self.order_seed, self.independent = None, {}
         self.trace, self.episodes, self.records, self.artifacts = [], {}, {}, []
         self.leaks, self.now, self._adv = [], None, False
         self._emit("meta", scenario=scenario_id, seed=seed, start=self.clock.isoformat(timespec="minutes"),
@@ -73,8 +74,15 @@ class Harness:
     # ---- trace ----
     def _emit(self, kind, **f):
         from . import notes
-        if "note" not in f and (kind == "endware" or (kind == "harness" and f.get("op") in COUNTED_OPS)):
-            f["note"] = notes.scripted_note(dict(kind=kind, **f))      # the harness actor's own note
+        if kind == "endware" or (kind == "harness" and f.get("op") in COUNTED_OPS):
+            if "sensitive_step" not in f:   # the environment decides: inputs/results name a sensitive item or its event
+                eps = [f["episode"]] if f.get("episode") in self.episodes else \
+                      [r.get("episode") for r in self.trace if r.get("op") == "export" and r.get("episode") in self.episodes][-1:]
+                refs = set().union(*[self.sensitive_refs(e) for e in eps]) if eps else set()
+                blob = json.dumps(_jsonable(f), default=str)
+                f["sensitive_step"] = bool(refs) and (kind == "endware" or (f.get("op") == "export" and any("#" in x for x in refs)) or any(f'"{x}"' in blob or ("#" in x and x in blob) for x in refs))
+            if "note" not in f:
+                f["note"] = notes.scripted_note(dict(kind=kind, **f))      # the harness actor's own note
         rec = _jsonable(dict(seq=len(self.trace), kind=kind, **f))
         self.trace.append(rec)
         return rec
@@ -90,7 +98,7 @@ class Harness:
         return hashlib.sha256(self.trace_jsonl().encode()).hexdigest()
 
     # ---- harness-only operations ----
-    def open_episode(self, kind, case, episode_id, patient, needs=()):
+    def open_episode(self, kind, case, episode_id, patient, needs=(), audit=False):
         """Opens an episode (truth: "harness: reset"). The locale layer runs here, before any question is
         shown: missing pack (if the episode leads to endware wording, needs 'pack'), missing patient
         language, missing decision-maker term (needs 'legal_term'). A blocked episode opens in 1 call and ends."""
@@ -104,7 +112,7 @@ class Harness:
         self._emit("harness", op="open", episode=episode_id, env=kind, patient=patient,
                    case=os.path.basename(case) if isinstance(case, str) else case.get("form_id") or case.get("list_id"),
                    blocks=[{"block": b, "line": locales.line(b, language=self.language, **{"locale pack": self.pack})}
-                           for b in ep.blocks])
+                           for b in ep.blocks], **({"audit": True} if audit else {}))
         return episode_id
 
     def try_export_nonsynthetic(self, kind, case, patient):
@@ -127,7 +135,8 @@ class Harness:
             reason = self._line("RF-EXPORT-REAL")               # orders has no synthetic flag yet: stack refuses
         r = {"accepted": reason is None, "reason": reason or "", "by": "middleware" if hasattr(env, "export") else "harness"}
         self._emit(COUNTED, actor="harness", role="harness", discipline=None, patient=patient, episode=scratch_id,
-                   method="export", args=[{"synthetic": False}], adversarial=True, accepted=r["accepted"], response=r)
+                   method="export", args=[{"synthetic": False}], adversarial=True, accepted=r["accepted"], response=r,
+                   note={"claim": "CL-EXPORTED" if r["accepted"] else "CL-REFUSED", "reason": ""})
         return r
 
     def blocked(self, episode_id):
@@ -145,9 +154,22 @@ class Harness:
         return self._emit("record", actor=actor, record=record_id, patient=patient, field=field, text=text,
                           ts=self.tick(0))
 
-    def record_result(self, actor, record_id, patient, label, t, value, unit):
+    def record_result(self, actor, record_id, patient, label, t, value, unit, role="clinician"):
         """Harness call that records a lab result (counted). It reaches a figure only once an orders tick cites
-        its record id as evidence."""
+        its record id as evidence. In a blocked episode only a clinician may record (interpreter used)."""
+        blocks = [b for ep in self.episodes.values() if ep.patient == patient for b in ep.blocks]
+        if blocks and role not in CLINICIAN_ROLES:
+            r = {"accepted": False, "block": blocks[0], "by": "locale",
+                 "reason": locales.line(blocks[0], language=self.language, **{"locale pack": self.pack})}
+            adv, self._adv = self._adv, False
+            from . import notes
+            rec = dict(actor=actor, role=role, discipline=None, patient=patient, episode=None, method="record_result",
+                       args=[{"record": record_id}], accepted=False, response=r, sensitive_step=False)
+            if adv:
+                rec["adversarial"] = True
+            rec["note"] = notes.scripted_note(dict(rec, kind=COUNTED))
+            self._emit(COUNTED, **rec)
+            return r
         self.records[record_id] = dict(actor=actor, patient=patient, field="result", text=f"{label}|{t}|{value}|{unit}")
         return self._emit("harness", op="record_result", actor=actor, record=record_id, patient=patient,
                           label=label, t=t, value=value, unit=unit)
@@ -178,14 +200,14 @@ class Harness:
         self._emit("harness", op="check", episode=episode_id, result=c, **({"audit": True} if audit else {}))
         return c
 
-    def export_bundle(self, episode_id):
+    def export_bundle(self, episode_id, audit=False):
         """One harness export (counted) plus what the adapter needs to stay a pure transform: the case items,
         the records cited by ticks, which events were recorded with an interpreter, the pack and the language."""
         ep = self.episodes[episode_id]
         blocked = list(ep.blocks)
-        x = None if blocked else self.export(episode_id)
+        x = None if blocked else self.export(episode_id, audit=audit)
         if blocked:
-            self._emit("harness", op="export_refused", episode=episode_id, blocks=blocked)   # counted (truth path)
+            self._emit("harness", op="export_refused", episode=episode_id, blocks=blocked, audit=audit)   # counted (truth path)
         env = self._replayed(ep)
         items = ([dict(q) for q in env.schema["question"]] if ep.kind == "forms" else [dict(j) for j in env.lst["job"]])
         interp = sorted(i for r in self.calls() if r.get("episode") == episode_id and r.get("interpreter_used")
@@ -203,14 +225,27 @@ class Harness:
 
     def patient_view(self, episode_id):
         ep = self.episodes[episode_id]
-        if ep.blocks:                        # hidden for a blocked episode
-            self._emit("harness", op="patient_view", episode=episode_id, result={}, hidden=list(ep.blocks))
-            return None
+        if ep.blocks:                        # blocked: only the safety alert lines show (a block never stops a safety alert)
+            full = self._replayed(ep).patient_view()
+            heads = [locales.line(l).split("[")[0] for l in ("PV-SAMEDAY", "PV-BEFORE-PROC")]
+            keep = {}
+            def walk(v):
+                if isinstance(v, str):
+                    return v if any(hd and v.startswith(hd) for hd in heads) else None
+                if isinstance(v, dict):
+                    d = {k: walk(x) for k, x in v.items()}
+                    return {k: x for k, x in d.items() if x not in (None, {}, [])}
+                if isinstance(v, list):
+                    return [x for x in (walk(y) for y in v) if x not in (None, {}, [])]
+                return None
+            keep = walk(full) or {}
+            self._emit("harness", op="patient_view", episode=episode_id, result=keep, hidden=list(ep.blocks))
+            return keep
         v = self._replayed(ep).patient_view()
         self._emit("harness", op="patient_view", episode=episode_id, result=v)
         return v
 
-    def export(self, episode_id):
+    def export(self, episode_id, audit=False):
         """Harness-only export. forms has export(); orders has none yet (gap), so its check stands in.
         A blocked episode is never exported: nothing goes to letters or figures."""
         ep = self.episodes[episode_id]
@@ -221,8 +256,19 @@ class Harness:
         x = e.export() if hasattr(e, "export") else dict(e.check(self.now), log=list(ep.log))
         if "log" not in x:
             x = dict(x, log=list(ep.log))
-        self._emit("harness", op="export", episode=episode_id)
+        self._emit("harness", op="export", episode=episode_id, audit=audit)   # audit: same export call, other episode
         return x
+
+    def ordered(self, group, fns):
+        """Seeded reordering hook. Only steps the answer file marks independent (truth 'independent_steps':
+        {group: [...]}) may be shuffled, and only when an order seed is set. Generated ids and timestamps may
+        change with the seed; the fixture clock and due times never do. The order used is logged."""
+        order = list(range(len(fns)))
+        if self.order_seed is not None and group in self.independent:
+            random.Random(f"{self.order_seed}:{self.scenario_id}:{group}").shuffle(order)
+        self._emit("harness", op="order", group=group, order=order, seed=self.order_seed,
+                   independent=group in self.independent)
+        return [fns[i]() for i in order]
 
     def mark_adversarial(self):
         """The next actor call is a planted bad action; it must be refused."""
@@ -251,7 +297,8 @@ class Harness:
             # signed decision-maker term exists. Nothing goes to letters or figures (export refuses).
             on_behalf = method == "step" and isinstance(args[0], dict) and "on_behalf" in args[0]
             b = ("BK-NO-LEGAL-TERM" if on_behalf and "BK-NO-LEGAL-TERM" in ep.blocks
-                 else ep.blocks[0] if h.role not in CLINICIAN_ROLES else None)
+                 else ("BK-NO-LANGUAGE" if "BK-NO-LANGUAGE" in ep.blocks else ep.blocks[0])
+                 if h.role not in CLINICIAN_ROLES else None)
             if b:
                 return self._out(h, rec, {"accepted": False, "block": b, "by": "locale",
                                           "reason": locales.line(b, language=self.language, **{"locale pack": self.pack})})
@@ -262,7 +309,13 @@ class Harness:
                 args = [dict(args[0], interpreter=True)]     # middleware field, where it exists (round 8)
         env = self._replayed(ep, h.actor, h.role, h.discipline, h.scope)
         before = len(env.log)
-        q0 = len(self.peek(episode_id).get("clinician_queue", []) or []) if method == "step" else 0
+        if method == "step" and isinstance(args[0], dict) and args[0].get("type") == "review":
+            refs0 = self.sensitive_refs(episode_id)      # a review that closes a sensitive item's entry is sensitive
+            pre = " ".join(self.peek(episode_id).get("clinician_queue", []) or [])
+            rec["_closed_sensitive"] = any(x in pre for x in refs0 if "#" not in x) or any(
+                f"event {x.rsplit('#', 1)[1]}" in pre for x in refs0 if "#" in x)
+        can_escalate = method == "step" and isinstance(args[0], dict) and args[0].get("type") in ("answer", "decline", "submit")
+        q0 = self._alerts(episode_id) if can_escalate else set()
         if method == "step" and isinstance(args[0], dict):
             a = dict(args[0])
             a.setdefault(ts_key(ep.kind), self.tick())
@@ -286,8 +339,8 @@ class Harness:
         if method == "step" and r.get("accepted"):
             ep.log.extend(new)
             rec["events"] = [len(ep.log) - len(new) + i for i in range(len(new))]
-            q1 = len(self.peek(episode_id).get("clinician_queue", []) or [])
-            if q1 > q0 or self._would_escalate(ep, env, new):
+            rec["queue_after"] = list(self.peek(episode_id).get("clinician_queue", []) or [])   # env record, for the scorer
+            if can_escalate and (self._alerts(episode_id) - q0 or self._would_escalate(ep, env, new)):
                 rec["escalated"] = True
             out = self._out(h, rec, r)
             self._escalate_sensitive(ep, env, new, rec["events"])
@@ -297,6 +350,17 @@ class Harness:
                            queue=list(c.get("clinician_queue", [])), answers=c.get("answers", {}))
             return out
         return self._out(h, rec, r)
+
+    ESCALATION_LINES = ("CQ-SAMEDAY-ALERT", "CQ-BEFORE-PROC", "CQ-THREE-FAILS")
+
+    def _alerts(self, episode_id):
+        """Queue entries that are escalations (signed CQ lines, matched by their fixed text before any slot)."""
+        try:
+            q = self.peek(episode_id).get("clinician_queue", []) or []
+        except Exception:
+            return set()
+        heads = [locales.line(l).split("[")[0] for l in self.ESCALATION_LINES]
+        return {x for x in q if any(hd and x.startswith(hd) for hd in heads)}
 
     def _would_escalate(self, ep, env, new):
         if ep.kind != "forms" or not isinstance(ep.case, str):
@@ -356,7 +420,8 @@ class Harness:
         refs = self.sensitive_refs(rec["episode"]) if rec.get("episode") in self.episodes else set()
         blob = json.dumps(_jsonable([rec.get("args"), r, rec.get("events")]))
         ev = {f"{rec['episode']}#{n}" for n in rec.get("events") or []}
-        rec["sensitive_step"] = bool(ev & refs or any(f'"{x}"' in blob or (("#" in x) and x in blob) for x in refs))
+        rec["sensitive_step"] = bool(ev & refs or any(f'"{x}"' in blob or (("#" in x) and x in blob) for x in refs)
+                                     or bool(rec.pop("_closed_sensitive", False)))
         rec["note"] = {"claim": note.get("claim") or notes.scripted_note(full)["claim"], "reason": note.get("reason", "")}
         self._emit(COUNTED, **rec, accepted=accepted, response=r)
         return r
@@ -389,7 +454,7 @@ class Harness:
         export/replay, and endware builds (1 per letter, 1 per figure). The adapter transform is not a call."""
         return [r for r in self.trace if (r["kind"] == COUNTED and not r.get("adversarial"))
                 or (r["kind"] == "harness" and r.get("op") in COUNTED_OPS and not r.get("audit"))
-                or r["kind"] == "endware"]
+                or (r["kind"] == "endware" and not r.get("audit"))]
 
     def write(self, path):
         with open(path, "w") as f:

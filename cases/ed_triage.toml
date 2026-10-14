@@ -1,4 +1,4 @@
-# Synthetic. ED triage, nursing.
+# Synthetic. ED triage, nursing. Questions as written in stack_truth S02 [[form_questions]].
 form_id = "SYNTH-ed-triage"
 version = "1"
 audience = "clinician"
@@ -12,17 +12,9 @@ safety_critical = true
 clinician_must_confirm = false
 
 [[question]]
-id = "breathing_hard"
+id = "walks_unaided"
 version = "1"
-text = "Is the patient short of breath?"
-alert_answer = true
-safety_critical = true
-clinician_must_confirm = false
-
-[[question]]
-id = "fever"
-version = "1"
-text = "Is the temperature above 38 degrees?"
-alert_answer = true
+text = "Can the patient walk without help?"
+alert_answer = false
 safety_critical = false
 clinician_must_confirm = false

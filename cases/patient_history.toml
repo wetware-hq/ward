@@ -1,0 +1,48 @@
+# Stack copy of forms/examples/patient_history.toml (synthetic). Only change: allergy_any alert_route = before_procedure,
+# per the answer files (alert_routes). Do not edit by hand otherwise.
+# Synthetic example. A patient (or their agent) fills this in before a clinic visit.
+form_id = "patient-history"
+version = "2"
+audience = "patient"
+
+[[question]]
+id = "allergy_any"
+alert_route = "before_procedure"
+version = "1"
+text = "Do you have any allergies to medicines?"
+alert_answer = true
+safety_critical = true
+clinician_must_confirm = false
+
+[[question]]
+id = "allergy_reaction_severe"
+version = "1"
+text = "Did a medicine allergy ever make it hard to breathe?"
+alert_answer = true
+safety_critical = true
+clinician_must_confirm = false
+ask_if = { id = "allergy_any", equals = true, wording = "you said you have no medicine allergies" }
+
+[[question]]
+id = "takes_blood_thinner"
+version = "1"
+text = "Do you take a blood thinner?"
+alert_answer = true
+safety_critical = false
+clinician_must_confirm = false
+
+[[question]]
+id = "smokes"
+version = "1"
+text = "Do you smoke now?"
+alert_answer = true
+safety_critical = false
+clinician_must_confirm = false
+
+[[question]]
+id = "pregnant_possible"
+version = "1"
+text = "Could you be pregnant?"
+alert_answer = true
+safety_critical = false
+clinician_must_confirm = false

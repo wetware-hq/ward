@@ -305,7 +305,9 @@ def test_blocked_clinician_safety_answer_accepted_flagged_and_output_refused():
     art = letter(h, "/tmp/unused", P, [EP], "Patient", "update to patient")
     assert art["tool"] == "block" and art["block"] == "BK-NO-LANGUAGE"
     assert run_figure(h, P, EP, [], "1930-01-02T00:00:00", "/tmp/unused")["tool"] == "block"
-    assert h.patient_view(EP) is None
+    v = h.patient_view(EP)                     # blocked: only safety alert lines show, nothing else
+    heads = [locales.line(l).split("[")[0] for l in ("PV-SAMEDAY", "PV-BEFORE-PROC")]
+    assert all(any(str(x).startswith(hd) for hd in heads) for x in v.values())
 
 
 def test_blocked_legal_term_refuses_on_behalf_only():
@@ -397,7 +399,8 @@ def test_exact_block_set_and_check_end():
     assert not scorer.outputs(h, {"tool": "block", "all": ["BK-NO-PACK"]}, t)[0]
     assert not scorer.outputs(h, {"tool": "block", "all": ["BK-NO-PACK", "BK-NO-LEGAL-TERM", "BK-NO-LANGUAGE"]}, t)[0]
     assert scorer.outputs(h, {"tool": "check", "exit": 1}, {"expected_artifact": "none", "expected_exit": 1})[0]
-    assert not scorer.outputs(h, {"tool": "check", "exit": 0}, {})[0]
+    assert scorer.outputs(h, {"tool": "check", "exit": 0}, {})[0]                   # path builds nothing: check end ok
+    assert not scorer.outputs(h, {"tool": "check", "exit": 0}, {"path_expectations": [{"step": 1, "call": "letters: build"}]})[0]
     assert not scorer.outputs(h, {"tool": "check", "exit": 0}, {"expected_artifact": "none", "expected_exit": 1})[0]
     assert not scorer.outputs(h, {"tool": "letters", "exit": 0, "letter": "x"}, {"expected_artifact": "none"})[0]
 
@@ -515,6 +518,8 @@ def test_alert_routing_broken(route, broken):
     h = routed_world("decline")
     real = h.peek                                    # ignore any queue lines the live forms writes itself
     h.peek = lambda eid: dict(real(eid), clinician_queue=[])
+    for r in h.trace:
+        r.pop("queue_after", None)
     other = "before_procedure" if route == "same_day" else "same_day"
     plant(h, other if broken == "wrong_route" else route, cq=broken != "no_queue", pv=broken != "no_pv")
     assert not scorer.alert_routing(h, {"alert_routes": {"fake_a": route}})[0]
@@ -806,3 +811,78 @@ def test_letters_figures_never_read_notes():
     import inspect
     from stack import adapter
     assert "note" not in inspect.getsource(adapter.facts) and "note\"" not in inspect.getsource(endware)
+
+
+def test_answer_file_language_names_map_to_codes():
+    assert Harness("FAKE", 1, "1930-01-01T08:00", language="English").language == "en"
+    assert Harness("FAKE", 1, "1930-01-01T08:00", language="German").language == "de"
+
+
+# ---- [agent_name] from the display name only; raw agent id never in a patient view
+def test_agent_name_refuses_an_internal_id():
+    with pytest.raises(ValueError):
+        locales.line("PV-GRANT-LIST", agent_name="SYNTH-agent-11", date="1938-01-24")
+    with pytest.raises(ValueError):
+        locales.line("PV-GRANT-LIST", agent_name="agent_7f3a", date="1938-01-24")
+    assert locales.line("PV-GRANT-LIST", agent_name="Helper assistant", date="1938-01-24").startswith("Helper assistant")
+
+
+def test_raw_agent_id_in_patient_view_fails():
+    h, dr, pa, ag = world()
+    assert scorer.no_leaks(h)[0]
+    h._emit("harness", op="patient_view", episode=EP, result={"access": f"{ag.actor} can help"})
+    ok, d = scorer.no_leaks(h)
+    assert not ok and d["agent_id_in_patient_view"] == [ag.actor]
+
+
+# ---- seeded reordering hook
+def _ordered_world(seed, independent):
+    h = Harness("FAKE", 1, "1930-01-01T08:00")
+    h.order_seed, h.independent = seed, independent
+    out = []
+    h.ordered("g", [lambda i=i: out.append(i) for i in range(6)])
+    return h, out
+
+
+def test_order_unchanged_without_declared_independence():
+    h, out = _ordered_world(7, {})
+    assert out == list(range(6)) and h.trace[-1]["order"] == list(range(6)) and not h.trace[-1]["independent"]
+
+
+def test_order_shuffles_only_declared_groups_and_is_logged():
+    h, out = _ordered_world(7, {"g": ["a"]})
+    assert sorted(out) == list(range(6)) and h.trace[-1]["order"] == out and h.trace[-1]["seed"] == 7
+    assert any(_ordered_world(s, {"g": []})[1] != list(range(6)) for s in range(5))
+    assert _ordered_world(7, {"g": []})[1] == out                       # same seed, same order
+
+
+def test_order_seed_never_moves_the_fixture_clock():
+    a = Harness("FAKE", 1, "1930-01-01T08:00"); b = Harness("FAKE", 99, "1930-01-01T08:00")
+    assert a.clock == b.clock
+
+
+def test_same_seed_replay_is_byte_identical(tmp_path):
+    from stack import runner
+    sid = "S09-overdue-order"
+    a, _ = runner.run(sid, str(tmp_path / "a"), "English", order_seed=3)
+    b, _ = runner.run(sid, str(tmp_path / "b"), "English", order_seed=3)
+    assert a.trace_jsonl() == b.trace_jsonl()
+
+
+@pytest.mark.parametrize("resp,result,claim", [
+    ({"accepted": False, "reason": "x"}, "refused", "CL-REFUSED"),
+    ({"accepted": False, "block": "BK-NO-PACK", "reason": "x"}, "blocked", "CL-BLOCKED"),
+])
+def test_claim_rule_refused_vs_blocked(resp, result, claim):
+    from stack import notes
+    rec = {"kind": "call", "method": "step", "args": [{"type": "submit"}], "accepted": False, "response": resp}
+    assert notes.env_result(rec) == result and notes.claim_for(result) == claim
+    ok = dict(rec, accepted=True, response={"accepted": True})
+    assert notes.claim_for(notes.env_result(ok)) == "CL-SUBMITTED"
+    assert notes.claim_for(notes.env_result(dict(ok, escalated=True))) == "CL-ESCALATED"
+
+
+def test_answer_that_escalates_still_claims_answered():
+    from stack import notes
+    assert notes.claim_for("answered+escalated") == "CL-ANSWERED"
+    assert notes.claim_for("declined+escalated") == "CL-DECLINED"

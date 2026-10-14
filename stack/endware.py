@@ -29,10 +29,11 @@ def _ref(h, ev):
     return {"episode": ep, "event": int(n)}
 
 
-def letter(h, out, patient, episodes, reader, brief, phrases=None, privacy=None, notes=()):
-    """One harness export per episode -> adapter facts -> notes -> one letters build."""
+def letter(h, out, patient, episodes, reader, brief, phrases=None, privacy=None, notes=(), audit=False):
+    """One harness export (all of the letter's episodes) -> adapter facts -> notes -> one letters build.
+    audit=True: a second view of the same export (not a counted call)."""
     from . import adapter
-    bundles = [h.export_bundle(e) for e in episodes]
+    bundles = [h.export_bundle(e, audit=audit or n > 0) for n, e in enumerate(episodes)]
     if any(bd["blocks"] for bd in bundles):
         return _blocked_artifact(h, bundles, "letters")
     audience = "patient" if brief.strip().endswith("to patient") else "clinician"
@@ -73,12 +74,12 @@ def letter(h, out, patient, episodes, reader, brief, phrases=None, privacy=None,
         add(f"{k}:", [])
         for t, r in fields[k]:
             add(f"- {t}", r)
-    res = run_letter_text(h, "\n".join(lines) + "\n", refs, brief, out, privacy)
+    res = run_letter_text(h, "\n".join(lines) + "\n", refs, brief, out, privacy, audit=audit)
     res.update(facts=fs, wording=adapter.wording_status())
     return res
 
 
-def run_letter_text(h, text, refs, brief, outdir, privacy=None):
+def run_letter_text(h, text, refs, brief, outdir, privacy=None, audit=False):
     os.makedirs(outdir, exist_ok=True)
     with tempfile.TemporaryDirectory() as td:
         p = os.path.join(td, "notes.txt")
@@ -89,7 +90,7 @@ def run_letter_text(h, text, refs, brief, outdir, privacy=None):
             cmd += ["--privacy", "true" if privacy else "false"]
         r = subprocess.run(cmd, capture_output=True, text=True, cwd=os.path.dirname(LETTERS))
     letter = open(os.path.join(outdir, "letter.md")).read() if r.returncode == 0 else ""
-    h._emit("endware", tool="letters", brief=brief, exit=r.returncode)
+    h._emit("endware", tool="letters", brief=brief, exit=r.returncode, **({"audit": True} if audit else {}))
     with open(os.path.join(outdir, "notes.refs.json"), "w") as f:
         json.dump({"notes": text.splitlines(), "refs": refs}, f, indent=1)
     return {"tool": "letters", "brief": brief, "exit": r.returncode, "letter": letter, "notes": text, "refs": refs,

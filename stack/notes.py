@@ -17,7 +17,7 @@ def env_result(rec):
         if rec.get("op") == "open" and rec.get("blocks"):
             return "blocked"
         if rec.get("op") == "export_refused":
-            return "refused"
+            return "blocked" if rec.get("blocks") else "refused"
         return _OP.get(rec.get("op"), rec.get("op") or "called")
     if not rec.get("accepted", True):
         r = rec.get("response") or {}
@@ -27,16 +27,14 @@ def env_result(rec):
     a = (rec.get("args") or [{}])[0]
     t = a.get("type") if isinstance(a, dict) else None
     base = _STEP.get(t, t or rec.get("method") or "called")
-    return base + "+escalated" if rec.get("escalated") else base
+    if rec.get("escalated"):
+        return "escalated" if base == "submitted" else base + "+escalated"
+    return base
 
 
 def claim_for(result):
-    """Claim rule: refused -> CL-REFUSED, blocked -> CL-BLOCKED, a submit that escalates -> CL-ESCALATED,
-    otherwise the claim names the call made."""
-    if result in ("refused", "blocked"):
-        return "CL-" + result.upper()
-    if result == "submitted+escalated":
-        return "CL-ESCALATED"
+    """Claim rule: refused -> CL-REFUSED, blocked -> CL-BLOCKED, a submit that escalates (result 'escalated') ->
+    CL-ESCALATED, otherwise the claim names the call made ('answered+escalated' -> CL-ANSWERED)."""
     return "CL-" + result.split("+")[0].upper()
 
 
