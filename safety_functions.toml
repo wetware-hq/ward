@@ -1,0 +1,60 @@
+# Every function that implements a safety row: raises a refusal, maps a line, opens a queue entry or writes session
+# state. tests/test_safety_functions.py fails the build if one is missing; scripts/mutate.py mutates exactly this file.
+# (scripts/mutate_guards.py keeps the older targeted guard mutants for domainscan and the scorer.)
+line_tables = []
+
+[[modules]]
+path = "stack/harness.py"
+functions = [
+    "__init__",
+    "_call",
+    "_emit",
+    "_line",
+    "_out",
+    "export",
+    "mark_adversarial",
+    "note",
+    "open_episode",
+    "patient_view",
+    "record",
+    "record_result",
+    "set_now",
+    "tick",
+    "try_export_nonsynthetic",
+]
+
+[[modules]]
+path = "stack/adapter.py"
+functions = [
+    "facts",
+]
+
+[[modules]]
+path = "stack/scorer.py"
+functions = [
+    "consent",
+    "load_truth",
+    "safety",
+    "safety_lines",
+    "waiting_parent",
+]
+
+[[modules]]
+path = "stack/locales.py"
+functions = [
+    "line",
+]
+
+[[modules]]
+path = "stack/scenario_tests.py"
+functions = [
+    "check_t1",
+    "check_t2",
+    "check_t4",
+]
+
+# A refusal must not change the calling handle, the episodes or the trace beyond its own refusal record.
+[[session]]
+path = "stack/harness.py"
+function = "_call"
+statements = ["h.role = 'clinician'", "h.actor = 'SYNTH-other'", "self.episodes.clear()", "self.trace.append({'kind': 'x'})"]

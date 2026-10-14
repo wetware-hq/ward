@@ -3,7 +3,7 @@ Declarations are read (read-only) from the S05 answer file. Observations are fak
 import copy, os, tomllib, pytest
 from stack import scenario_tests as st, adapter, scorer
 
-TRUTH = "/workspace/stack_truth/S05-mh-screen-by-patient-agent/truth.toml"
+TRUTH = __import__("os").path.join(__import__("stack.paths", fromlist=["TRUTH"]).TRUTH, "S05-mh-screen-by-patient-agent", "truth.toml")
 EP = st.EP
 
 

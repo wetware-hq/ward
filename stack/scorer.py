@@ -1,13 +1,13 @@
-"""Scores a trace against hand-written ground truth in /workspace/stack_truth/<scenario_id>/ (read-only).
+"""Scores a trace against hand-written ground truth in <siblings>/stack_truth/<scenario_id>/ (read-only).
 Nothing here derives the expected answer from a run. A scenario without BOTH truth.toml (Physician) and
 patient_wording.md (Educator) is PENDING TRUTH, which is a skip, never a pass.
-truth.toml schema: see /workspace/stack_truth/README.md (min_calls, idiot_index_cap, patient_language,
+truth.toml schema: see <siblings>/stack_truth/README.md (min_calls, idiot_index_cap, patient_language,
 expected_outcome, [[expected_outputs]], [[safety_items]], [[must_refuse]])."""
 import json, os, re, tomllib
 from . import loader, locales
 from .endware import letter_tags, DECLINE_TEXT
 
-TRUTH_ROOT = os.environ.get("STACK_TRUTH", "/workspace/stack_truth")
+from stack.paths import TRUTH as TRUTH_ROOT
 DEFAULT_CEILING = 1.5
 PENDING = "PENDING TRUTH"
 FOOTER = "Draft: check against the record before sending."

@@ -6,7 +6,7 @@ question is shown (ruling), and never fall back to English or to the au term:
   BK-NO-PACK  when a letter is asked for under a pack letters doesn't have  (PENDING WORDING)"""
 import os, re
 
-WORKSPACE = os.environ.get("STACK_WORKSPACE", "/workspace")
+from stack.paths import SIBLINGS as WORKSPACE
 SIGNED = os.path.join(WORKSPACE, "wording", "forms_orders_lines_SIGNED.md")
 ROUND6 = os.path.join(WORKSPACE, "wording", "forms_orders_lines_round6_DRAFT.md")
 PENDING_IDS = set()      # ids used by the stack but not yet in SIGNED; any id missing from SIGNED is PENDING WORDING

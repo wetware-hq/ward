@@ -1,0 +1,257 @@
+"""Scorer, adapter and locale behaviour on hand-built fakes (no scenario run)."""
+import types
+import pytest
+from stack import scorer, adapter, locales
+
+EPI = "SYNTH-FAKE-EP1"
+
+
+# ---- locales
+def test_unknown_line_is_pending_wording():
+    assert locales.line("XX-NO-SUCH-LINE") == f"{locales.PENDING_WORDING}: XX-NO-SUCH-LINE"
+    assert locales.line("XX-NO-SUCH-LINE", **{"locale pack": "au"}) == f"{locales.PENDING_WORDING}: XX-NO-SUCH-LINE"
+
+
+# ---- truth loading
+@pytest.mark.parametrize("missing", ["patient_language", "min_calls"])
+def test_truth_missing_key_raises(tmp_path, missing):
+    d = tmp_path / "FAKE-k"; d.mkdir()
+    body = {"patient_language": 'patient_language = "en"\n', "min_calls": "min_calls = 4\n"}
+    (d / "truth.toml").write_text("".join(v for k, v in body.items() if k != missing))
+    (d / "patient_wording.md").write_text("none\n")
+    with pytest.raises(ValueError, match=missing):
+        scorer.load_truth("FAKE-k", str(tmp_path))
+
+
+# ---- safety items
+class FH:
+    def __init__(self, peek, trace=()):
+        self._p, self.trace = peek, list(trace)
+    def peek(self, eid):
+        return self._p
+
+
+def run_safety(monkeypatch, kind, item, want, peek, lid="", queue=(), trace=(), ids=("a", "b"), jobs=None):
+    ep = types.SimpleNamespace(kind=kind)
+    env = types.SimpleNamespace(jobs=jobs or {})
+    monkeypatch.setattr(scorer, "_find_item", lambda h, i: (EPI, ep, env, list(ids)) if i in ids else None)
+    monkeypatch.setattr(scorer, "_queue_text", lambda h, e: list(queue))
+    s = {"item": item, "must_be": want, **({"line_id": lid} if lid else {})}
+    return scorer.safety(FH(peek, trace), {"safety_items": [s]})
+
+
+def test_safety_forms_closed_and_unknown(monkeypatch):
+    assert run_safety(monkeypatch, "forms", "b", "closed", {"open": ["a"], "flags": []})[0]
+    assert not run_safety(monkeypatch, "forms", "b", "closed", {"open": ["b"], "flags": []})[0]
+    ok, why = run_safety(monkeypatch, "forms", "zz", "closed", {"open": [], "flags": []})
+    assert not ok and why["failed"][0]["why"] == "not an item id in any episode"
+
+
+@pytest.mark.parametrize("flags,queue,lid,want", [
+    (["Unknown answer: question 2"], [], "", True),
+    (["Unknown answer: question 2"], [], "CQ-X", False),     # CQ lines need the queue
+    (["Unknown answer: question 22"], [], "", False),         # word boundary
+    (["Unknown answer: question 1"], [], "", False),
+    ([], ["b needs review"], "CQ-X", True),
+    ([], ["Q2: review"], "CQ-X", True),
+    ([], ["see question 2"], "", True),
+    ([], ["Q1: review", "question 1"], "", False),
+])
+def test_safety_forms_escalated(monkeypatch, flags, queue, lid, want):
+    ok, why = run_safety(monkeypatch, "forms", "b", "escalated", {"open": ["b"], "flags": flags}, lid=lid, queue=queue)
+    assert ok is want
+    if not want:
+        assert why["failed"][0]["why"] == "not escalated" + (f" ({lid})" if lid else "")
+
+
+@pytest.mark.parametrize("done,cancelled,want", [(["j"], [], True), ([], ["j"], True), ([], [], False)])
+def test_safety_orders_closed(monkeypatch, done, cancelled, want):
+    assert run_safety(monkeypatch, "orders", "j", "closed", {"done": done, "cancelled": cancelled},
+                      ids=("j",), jobs={"j": {"text": "Take bloods"}})[0] is want
+
+
+@pytest.mark.parametrize("flags,owner,due,want", [
+    (["Overdue: Take bloods (nurse, 09:00)"], "nurse", "09:00", True),
+    (["Overdue: Take bloods (nurse, 10:00)"], "nurse", "09:00", False),
+    (["Overdue: Take bloods (doctor, 09:00)"], "nurse", "09:00", False),
+    (["Overdue: Other (nurse, 09:00)"], "nurse", "09:00", False),
+    ([], "nurse", "09:00", False),
+])
+def test_safety_orders_escalated(monkeypatch, flags, owner, due, want):
+    trace = [{"op": "check", "episode": EPI, "result": {"flags": flags}}]
+    ep = types.SimpleNamespace(kind="orders")
+    env = types.SimpleNamespace(jobs={"j": {"text": "Take bloods"}})
+    monkeypatch.setattr(scorer, "_find_item", lambda h, i: (EPI, ep, env, ["j"]))
+    s = {"item": "j", "must_be": "escalated", "owner": owner, "due": due}
+    assert scorer.safety(FH({"done": [], "cancelled": []}, trace), {"safety_items": [s]})[0] is want
+
+
+# ---- waiting parent
+def wp(monkeypatch, snaps, ask_if=True, kind="forms", found=True):
+    q = {"c": {"ask_if": {"id": "p"}} if ask_if else {}}
+    hit = (EPI, types.SimpleNamespace(kind=kind), types.SimpleNamespace(q=q), ["p", "c"])
+    monkeypatch.setattr(scorer, "_find_item", lambda h, i: hit if found else None)
+    trace = [dict(op="after_submit", episode=EPI, seq=n, **s) for n, s in enumerate(snaps)]
+    return scorer.waiting_parent(FH({}, trace), "c", "Waiting for question [n] first.")
+
+
+def test_waiting_parent_paths(monkeypatch):
+    NP = "item has no parent question"
+    assert wp(monkeypatch, [], found=False) == (False, NP)
+    assert wp(monkeypatch, [], kind="orders") == (False, NP)
+    assert wp(monkeypatch, [], ask_if=False) == (False, NP)
+    assert wp(monkeypatch, []) == (False, "no failed submit with the parent blank")
+    good = {"final": False, "answers": {"p": "unanswered"}, "queue": ["Waiting for question 3 first."]}
+    bad = {"final": False, "answers": {}, "queue": ["other"]}
+    assert wp(monkeypatch, [good]) == (True, {"failed_submits": 1, "missing_after": []})
+    assert wp(monkeypatch, [good, bad]) == (False, {"failed_submits": 2, "missing_after": [1]})
+    # final submits and answered parents are not counted
+    skip = [dict(bad, final=True), dict(bad, answers={"p": True})]
+    assert wp(monkeypatch, skip + [good])[1]["failed_submits"] == 1
+    other = dict(bad, episode="SYNTH-OTHER")
+    assert wp(monkeypatch, [good])[0]
+
+
+# ---- safety lines
+def sl(monkeypatch, lines, surface="", caption=None, ev=None):
+    monkeypatch.setattr(scorer, "_surface", lambda h: surface)
+    monkeypatch.setattr(scorer, "_artifact_text", lambda a: "")
+    monkeypatch.setattr(scorer, "delivered_caption", lambda a: caption or "")
+    monkeypatch.setattr(scorer, "_record_event", lambda h, r: ev)
+    monkeypatch.setattr(scorer, "_line_text", lambda i: {"L-ON": "Signed [x] line"}.get(i))
+    return scorer.safety_lines(FH({}), {}, {"safety_lines": lines})
+
+
+def test_safety_lines_must_not_appear(monkeypatch):
+    rule = {"line_id": "L-ON", "expect": "Must NOT appear"}
+    assert sl(monkeypatch, [rule], "nothing")[0]
+    ok, why = sl(monkeypatch, [rule], "Signed 3 line")
+    assert not ok and why["failed"][0]["why"] == "appears but must not"
+    ok, why = sl(monkeypatch, [dict(rule, line_id="L-OFF")], "x")
+    assert not ok and why["failed"][0]["why"] == "unsigned"
+    assert sl(monkeypatch, [{"line_id": "NOTE-NO-LEAK", "expect": "must not appear"}], "anything")[0]
+
+
+def test_safety_lines_caption_counts(monkeypatch):
+    once = {"item": "R1", "line_id": "FG", "text": "From [ev].", "expect": "in the delivered figure caption exactly once"}
+    assert sl(monkeypatch, [once], caption="From E#1.", ev="E#1")[0]
+    ok, why = sl(monkeypatch, [once], caption="From E#1. From E#1.", ev="E#1")
+    assert not ok and why["failed"][0]["found_in_caption"] == 2
+    many = dict(once, expect="in the delivered figure caption")
+    assert sl(monkeypatch, [many], caption="From E#1. From E#1.", ev="E#1")[0]
+    assert not sl(monkeypatch, [many], caption="From E#1.", ev=None)[0]
+    assert not sl(monkeypatch, [dict(once, text="")], caption="From E#1.", ev="E#1")[0]   # no text: falls through
+
+
+def test_safety_lines_by_id_and_text(monkeypatch):
+    assert sl(monkeypatch, [{"line_id": "L-ON"}], "Signed 7 line")[0]
+    assert not sl(monkeypatch, [{"line_id": "L-ON"}], "Signed line")[0]
+    assert not sl(monkeypatch, [{"line_id": "L-OFF"}], "Signed 7 line")[0]
+    assert sl(monkeypatch, [{"line_id": "L-OFF", "text": "plain"}], "a plain b")[0]
+    ok, why = sl(monkeypatch, [{"item": "i", "line_id": "L-OFF", "text": "plain", "expect": "e"}], "none")
+    assert why["failed"] == [{"item": "i", "line_id": "L-OFF", "expect": "e"}]
+
+
+# ---- consent
+class CH(FH):
+    def __init__(self, logs, views=(), peek=None, raise_peek=False):
+        self.episodes = {e: types.SimpleNamespace(kind="forms", log=l) for e, l in logs.items()}
+        self.trace = [{"op": "patient_view", "episode": e, "result": v} for e, v in views]
+        self._p, self._r = peek or {"answers": {}}, raise_peek
+    def peek(self, eid):
+        if self._r:
+            raise ValueError("bad log")
+        return self._p
+
+
+def A(q, role, v=True): return {"type": "answer", "question_id": q, "role": role, "value": v}
+
+
+def test_consent_paths():
+    from stack import loader
+    you = loader.forms()._deps["messages"].LINES["PV-ANS-SELF"]
+    ok, why = scorer.consent(CH({EPI: [A("q", "patient_agent")]}, [(EPI, {"q": you + " yes"})]), {})
+    assert why["failures"] == [("a", EPI, "q")]
+    for role in ("clinician_agent",):
+        assert not scorer.consent(CH({EPI: [A("q", role)]}, [(EPI, {"q": you})]), {})[0]
+    assert scorer.consent(CH({EPI: [A("q", "patient")]}, [(EPI, {"q": you})]), {})[0]
+    confirmed = [A("q", "patient_agent"), {"type": "confirm", "question_id": "q", "role": "patient"}]
+    assert scorer.consent(CH({EPI: confirmed}, [(EPI, {"q": you})]), {})[0]
+    # only the last view counts
+    assert scorer.consent(CH({EPI: [A("q", "patient_agent")]}, [(EPI, {"q": you}), (EPI, {"q": "Your agent"})]), {})[0]
+    # (b) after revoke, regrant clears
+    rv = {"type": "revoke", "role": "patient"}
+    gr = {"type": "grant", "role": "patient"}
+    assert scorer.consent(CH({EPI: [rv, A("q", "patient_agent")]}), {})[1]["failures"] == [("b", EPI, "answer")]
+    assert scorer.consent(CH({EPI: [rv, gr, A("q", "patient_agent")]}), {})[0]
+    assert scorer.consent(CH({EPI: [rv, A("q", "patient")]}), {})[0]
+    # (c) a decline counted as no; re-answered is fine
+    dec = {"type": "decline", "question_id": "q", "role": "patient"}
+    assert scorer.consent(CH({EPI: [dec]}, peek={"answers": {"q": False}}), {})[1]["failures"] == [("c", EPI, "q")]
+    assert scorer.consent(CH({EPI: [dec]}, peek={"answers": {"q": "declined"}}), {})[0]
+    assert scorer.consent(CH({EPI: [dec, A("q", "patient", False)]}, peek={"answers": {"q": False}}), {})[0]
+    ok, why = scorer.consent(CH({EPI: []}, raise_peek=True), {})
+    assert why["failures"][0][:2] == ("log", EPI)
+    h = CH({EPI: [A("q", "patient_agent")]}, [(EPI, {"q": you})])
+    h.episodes["SYNTH-O"] = types.SimpleNamespace(kind="orders", log=[{"type": "revoke"}, {"type": "x", "role": "patient_agent"}])
+    assert scorer.consent(h, {})[1]["failures"] == [("a", EPI, "q")]
+
+
+def test_consent_letter_decline_lines():
+    from stack.endware import DECLINE_TEXT
+    h = CH({EPI: [{"type": "decline", "question_id": "q", "role": "patient"}, A("r", "patient")]}, peek={"answers": {}})
+    art = lambda notes, refs: {"tool": "letters", "notes": notes, "refs": refs}
+    ref = [[{"episode": EPI, "event": 0}]]
+    assert scorer.consent(h, art(f"Q: {DECLINE_TEXT}", ref))[0]
+    assert scorer.consent(h, art("Q: no", ref))[1]["failures"] == [("c", "letter", 1)]
+    assert not scorer.consent(h, art(f"Q: {DECLINE_TEXT}, denies", ref))[0]
+    assert scorer.consent(h, art("Q: no", [[{"episode": EPI, "event": 1}]]))[0]
+    assert scorer.consent(h, art("Q: no", [[{"record": "R"}]]))[0]
+    assert scorer.consent(h, {"tool": "figures", "notes": "Q: no", "refs": ref})[0]
+
+
+# ---- adapter
+def fbundle(log, kind="forms", export=None, items=None, interp=(), ep=EPI, records=None):
+    x = dict(export if export is not None else ({"complete": True, "answers": {}} if kind == "forms" else {"all_done": True}), log=log)
+    return {"episode_id": ep, "kind": kind, "blocks": [], "export": x, "interpreter_events": list(interp),
+            "items": items or [{"id": "q", "version": "1", "text": "Q?", "safety_critical": False, "alert_answer": True}],
+            "records": records or {}, "case": None}
+
+
+def E(t="answer", ep=EPI, ver="1", disc=None, **k):
+    return dict(type=t, question_id="q", episode_id=ep, question_version=ver, role="patient", discipline=disc,
+                value=True, timestamp="T", **k)
+
+
+def test_adapter_orders_needs_done_or_closed():
+    with pytest.raises(adapter.AdapterRefused, match="not check-passed"):
+        adapter.facts(fbundle([], "orders", {}))
+    assert adapter.facts(fbundle([], "orders", {"closed": True})) == []
+    assert adapter.facts(fbundle([], "orders", {"all_done": True})) == []
+
+
+@pytest.mark.parametrize("ev,status", [(E(), "answered"), (E(ep="SYNTH-OTHER"), "stale"), (E(ver="2"), "stale"),
+                                       (E("decline"), "declined"), (None, "unknown")])
+def test_adapter_status(ev, status):
+    f = adapter.facts(fbundle([ev] if ev else []))[0]
+    assert f["status"] == status and (f["value"] is True) == (status == "answered")
+    assert f["event_id"] == (f"{EPI}#0" if ev else "")
+
+
+def test_adapter_answered_by_on_behalf_interpreter():
+    f = adapter.facts(fbundle([E(disc="nursing", on_behalf="SYNTH-x")], interp=[0]))[0]
+    assert f["answered_by"] == "patient, nursing" and f["on_behalf"] == "SYNTH-x" and f["interpreter"] is True
+    f = adapter.facts(fbundle([E()]))[0]
+    assert f["answered_by"] == "patient" and f["on_behalf"] == "" and f["interpreter"] is False
+    assert adapter.facts(fbundle([]))[0]["answered_by"] == ""
+    assert adapter.facts(fbundle([E()], export={"complete": True, "answers": {"q": "n/a"}})) == []
+
+
+def test_adapter_orders_ticks():
+    log = [{"type": "note"}, {"type": "tick", "id": "j", "evidence": "R1", "role": "nurse", "discipline": "nursing", "timestamp": "T"},
+           {"type": "tick", "id": "k", "evidence": "R2", "role": "nurse", "discipline": None, "ts": "U"}]
+    out = adapter.facts(fbundle(log, "orders", records={"R1": {"field": "result", "text": "Hb 1"}}, interp=[1]))
+    assert [(f["item_id"], f["answered_by"], f["interpreter"], f["event_id"], f["recorded_at"]) for f in out] == [
+        ("j", "nurse, nursing", True, f"{EPI}#1", "T"), ("k", "nurse", False, f"{EPI}#2", "U")]
+    assert all(f["sensitive"] is False and f["safety"] is False and f["alert"] is None for f in out)
+    assert out[0]["text"] == "Hb 1" and out[1]["text"] == "" and out[0]["field"] == "result"

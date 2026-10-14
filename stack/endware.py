@@ -6,7 +6,7 @@ Notes and pastes are built ONLY from logged, checked events:
 Every notes line keeps the trace references it came from, so each [Ln] tag in a letter resolves to events."""
 import json, os, re, subprocess, sys, tempfile
 
-WORKSPACE = os.environ.get("STACK_WORKSPACE", "/workspace")
+from stack.paths import SIBLINGS as WORKSPACE
 LETTERS = os.path.join(WORKSPACE, "letters", "letters.py")
 FIGURES_DIR = os.path.join(WORKSPACE, "figures")
 FIGURES_PY = os.path.join(FIGURES_DIR, ".venv", "bin", "python")

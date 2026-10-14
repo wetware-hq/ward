@@ -663,7 +663,7 @@ def test_nonsynthetic_probe_does_not_mark_the_next_call():
 
 
 WAIT = "Waiting on Q1: Do you have any allergies to medicines? Then ask Q2: Did a medicine allergy ever make it hard to breathe?"
-HISTORY = "/workspace/forms/examples/patient_history.toml"
+HISTORY = __import__("os").path.join(__import__("stack.paths", fromlist=["SIBLINGS"]).SIBLINGS, "forms", "examples", "patient_history.toml")
 
 
 def waiting_world():

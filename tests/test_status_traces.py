@@ -8,13 +8,17 @@ S12 = "S12-patient-declines-safety-question-to-letter-with-privacy-line"
 S05 = "S05-mh-screen-by-patient-agent"
 
 
+KNOWN_RED = {"S05": "letters: patient letter text"}
+
+
 def need(sid):
     import os
     t = scorer.load_truth(sid)
     if t is None:
         pytest.skip(scorer.PENDING)
-    if os.environ.get("STACK_RUN_TRACES") != "1":
-        pytest.skip("trace run is opt-in: STACK_RUN_TRACES=1 (held until the forms/orders changes land)")
+    red = KNOWN_RED.get("S05" if sid == S05 else "")
+    if red and os.environ.get("STACK_RUN_TRACES") != "1":
+        pytest.skip("known red, outside stack: " + red)
     return t
 
 

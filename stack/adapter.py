@@ -5,11 +5,11 @@ no environment calls. Outputs:
   (b) a figures CSV: episode,item_id,value,unit,recorded_at,event_id,status,answered_by,on_behalf,interpreter,sensitive
 Every fact and row carries status (answered|declined|unknown|stale), answered_by (role, discipline), on_behalf,
 interpreter and sensitive. A declined or unknown answer is never written as a no and never dropped; its safety
-alert carries through. Letter status wording comes from /workspace/wording/letters_status_lines_DRAFT.md and
+alert carries through. Letter status wording comes from <siblings>/wording/letters_status_lines_DRAFT.md and
 is read from letters_status_lines_SIGNED.md (PENDING WORDING if only the draft exists). letters has no input for these fields (gap), so they reach it as notes lines."""
 import csv, io, os, re, tomllib
 
-WORKSPACE = os.environ.get("STACK_WORKSPACE", "/workspace")
+from stack.paths import SIBLINGS as WORKSPACE
 LT_SIGNED_FILE = os.path.join(WORKSPACE, "wording", "letters_status_lines_SIGNED.md")
 LT_DRAFT_FILE = os.path.join(WORKSPACE, "wording", "letters_status_lines_DRAFT.md")
 LT_SIGNED = os.path.exists(LT_SIGNED_FILE)   # PENDING WORDING unless the signed table exists

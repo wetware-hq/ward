@@ -1,19 +1,25 @@
 """One test per scenario trace. PENDING TRUTH (skip) until both truth files exist.
-Traces are opt-in (STACK_RUN_TRACES=1): truth files are still under review and the export adapter is on
-hold, so trace results are reported by scripts/report.py and do not gate the unit suite."""
+Traces run by default. The ones in KNOWN_RED wait on forms, letters or truth changes outside this repo and are
+skipped with their reason; STACK_RUN_TRACES=1 runs them too."""
 import os, pytest
 from stack.scenarios import SCENARIOS
 from stack import pipeline, scorer
 
-RUN = os.environ.get("STACK_RUN_TRACES") == "1"
+RUN_ALL = os.environ.get("STACK_RUN_TRACES") == "1"
+KNOWN_RED = {
+    "S05-mh-screen-by-patient-agent": "forms: form_answer:mh_q2 missing from outputs",
+    "S06b-sdm-on-behalf-au": "forms now refuses on_behalf from a patient session with PV-CARE-TEAM-STEP; truth expects RF-ROLE-CONFIRM",
+    "S08-three-fails-escalation": "queue line still shows the unfilled [items] slot",
+    "S12-patient-declines-safety-question-to-letter-with-privacy-line": "form_answer:allergy_any missing; letter safety lines (letters job)",
+}
 
 
 @pytest.mark.parametrize("sid", list(SCENARIOS))
 def test_trace(sid, tmp_path):
     if scorer.load_truth(sid) is None:
         pytest.skip(scorer.PENDING)
-    if not RUN:
-        pytest.skip("trace run is opt-in: STACK_RUN_TRACES=1")
+    if sid in KNOWN_RED and not RUN_ALL:
+        pytest.skip("known red, outside stack: " + KNOWN_RED[sid])
     r = pipeline.evaluate(sid, str(tmp_path))
     failed = {k: d for k, (ok, d) in r["criteria"].items() if not ok}
     assert not failed, failed

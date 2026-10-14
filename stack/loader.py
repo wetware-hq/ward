@@ -3,7 +3,7 @@ same names, so a plain import of both in one process collides (interface gap G1)
 with its own copies of those modules and kept under a private name."""
 import importlib.util, os, sys
 
-WORKSPACE = os.environ.get("STACK_WORKSPACE", "/workspace")
+from stack.paths import SIBLINGS as WORKSPACE
 _CACHE = {}
 
 

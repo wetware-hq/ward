@@ -1,13 +1,13 @@
 """Scenario scripts: agent behaviour only. Each script drives scripted, deterministic actors through the
 middleware and, where the scenario has one, asks for an endware artifact through the adapter.
 Nothing here says what the right answer is: minimum paths, expected outputs, safety items, refusals and
-patient wording live in /workspace/stack_truth/<id>/ and are read only by the scorer.
+patient wording live in <siblings>/stack_truth/<id>/ and are read only by the scorer.
 Cases come from forms/examples and orders/examples (read-only) or from ./cases (synthetic, documented)."""
 import os
 from .endware import letter, run_figure
 
 HERE = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-WS = os.environ.get("STACK_WORKSPACE", "/workspace")
+from stack.paths import SIBLINGS as WS
 FORMS_EX = lambda n: os.path.join(WS, "forms", "examples", n + ".toml")
 CASE = lambda n: os.path.join(HERE, "cases", n + ".toml")
 import tomllib as _toml
