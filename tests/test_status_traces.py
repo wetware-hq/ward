@@ -8,7 +8,7 @@ S12 = "S12-patient-declines-safety-question-to-letter-with-privacy-line"
 S05 = "S05-mh-screen-by-patient-agent"
 
 
-KNOWN_RED = {"S05": "letters: patient letter text"}
+KNOWN_RED = {}
 
 
 def need(sid):

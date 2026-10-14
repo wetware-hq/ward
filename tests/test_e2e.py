@@ -7,9 +7,8 @@ from stack import pipeline, scorer
 
 RUN_ALL = os.environ.get("STACK_RUN_TRACES") == "1"
 KNOWN_RED = {
-    "S05-mh-screen-by-patient-agent": "forms: form_answer:mh_q2 missing from outputs",
+    "S05-mh-screen-by-patient-agent": "scenario test S05-T5 (paraphrase on a sensitive step) is pending review",
     "S06b-sdm-on-behalf-au": "forms now refuses on_behalf from a patient session with PV-CARE-TEAM-STEP; truth expects RF-ROLE-CONFIRM",
-    "S08-three-fails-escalation": "queue line still shows the unfilled [items] slot",
     "S12-patient-declines-safety-question-to-letter-with-privacy-line": "form_answer:allergy_any missing; letter safety lines (letters job)",
 }
 

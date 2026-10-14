@@ -255,3 +255,60 @@ def test_adapter_orders_ticks():
         ("j", "nurse, nursing", True, f"{EPI}#1", "T"), ("k", "nurse", False, f"{EPI}#2", "U")]
     assert all(f["sensitive"] is False and f["safety"] is False and f["alert"] is None for f in out)
     assert out[0]["text"] == "Hb 1" and out[1]["text"] == "" and out[0]["field"] == "result"
+
+
+# ---- queue slot named by item ids; sensitive answer cut from the clinician letter
+def out_rows(monkeypatch, rows, queue=(), art=None, q=None):
+    q = q or {"a": {"text": "Allergy?"}, "b": {"text": "Smoke?"}, "c": {"text": "Harm?"}}
+    hit = lambda i: (EPI, types.SimpleNamespace(kind="forms", log=[]), types.SimpleNamespace(q=q), list(q)) if i in q else None
+    monkeypatch.setattr(scorer, "_find_item", lambda h, i: hit(i))
+    monkeypatch.setattr(scorer, "_queue_text", lambda h, e: list(queue))
+    monkeypatch.setattr(scorer, "_line_text", lambda i: {"CQ-T": "Missing: [items]. Count [k]."}.get(i))
+    h = types.SimpleNamespace(trace=[], episodes={EPI: None}, peek=lambda e: {})
+    return scorer.outputs(h, art or {"tool": "letters"}, {"expected_outputs": rows})
+
+
+def test_queue_slot_items_by_id(monkeypatch):
+    row = {"type": "queue", "item": "missing [items]", "value": "a, c", "source_line": "CQ-T", "expected_section": "clinician queue"}
+    assert out_rows(monkeypatch, [row], ["Missing: 1. Allergy?; 3. Harm?. Count [k]."])[0]
+    for bad in (["Missing: 1. Allergy?. Count [k]."], ["Missing: 3. Harm?; 1. Allergy?. Count [k]."],
+                ["x Missing: 1. Allergy?; 3. Harm?. Count [k]."], []):
+        ok, why = out_rows(monkeypatch, [row], bad)
+        assert not ok and why["missing"] == ["queue:missing [items]"]
+    assert not out_rows(monkeypatch, [dict(row, value="a, zz")], ["Missing: 1. Allergy?. Count [k]."])[0]
+    assert not out_rows(monkeypatch, [dict(row, value=" , ")], ["Missing: [items]. Count [k]."])[0]
+    # a slot the template lacks falls back to the literal value
+    k = dict(row, item="failed submissions [n]", value="3")
+    assert out_rows(monkeypatch, [k], ["Count 3."])[0] and not out_rows(monkeypatch, [k], ["Count 4."])[0]
+
+
+def test_queue_slot_needs_forms_item(monkeypatch):
+    row = {"type": "queue", "item": "missing [items]", "value": "a", "source_line": "CQ-T", "expected_section": "clinician queue"}
+    q = {"a": {"text": "Allergy?"}}
+    monkeypatch.setattr(scorer, "_line_text", lambda i: "Missing: [items].")
+    monkeypatch.setattr(scorer, "_queue_text", lambda h, e: ["Missing: 1. Allergy?."])
+    monkeypatch.setattr(scorer, "_find_item", lambda h, i: (EPI, types.SimpleNamespace(kind="orders", log=[]), None, ["a"]))
+    h = types.SimpleNamespace(trace=[], episodes={EPI: None}, peek=lambda e: {})
+    assert not scorer.outputs(h, {"tool": "letters"}, {"expected_outputs": [row]})[0]
+
+
+def test_sensitive_answer_cut_from_clinician_letter(monkeypatch):
+    row = {"type": "form_answer", "item": "c", "value": "Yes", "status": "answered",
+           "expected_section": "cut from clinician letter (dropped list only); kept word for word in any patient letter"}
+    fact = {"item_id": "c", "status": "answered", "value": True}
+    art = lambda facts, clin="Safe text": {"tool": "letters", "letter": "pt", "facts": facts, "clinician_letter": {"letter": clin}}
+    assert out_rows(monkeypatch, [row], art=art([fact]))[0]
+    assert not out_rows(monkeypatch, [row], art=art([fact], "says Harm here"))[0]
+    assert not out_rows(monkeypatch, [row], art=art([dict(fact, value=False)]))[0]
+    assert not out_rows(monkeypatch, [row], art=art([dict(fact, status="declined")]))[0]
+    assert not out_rows(monkeypatch, [row], art=art([]))[0]
+    assert out_rows(monkeypatch, [dict(row, value="No")], art=art([dict(fact, value=False)]))[0]
+    assert not out_rows(monkeypatch, [dict(row, item="zz")], art=art([dict(fact, item_id="zz")]))[0]
+    assert out_rows(monkeypatch, [row], art=art([dict(fact, value=False), fact]))[0]       # the last fact counts
+
+
+def test_artifact_text_includes_clinician_letter():
+    assert scorer._artifact_text({"letter": "A", "clinician_letter": {"letter": "B"}}) == "A\nB"
+    assert scorer._artifact_text({"legends": "L"}) == "L"
+    assert scorer._artifact_text({"clinician_letter": {"letter": "B"}}) == "B"
+    assert scorer._artifact_text({}) == ""

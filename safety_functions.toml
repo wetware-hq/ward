@@ -33,6 +33,7 @@ functions = [
 path = "stack/scorer.py"
 functions = [
     "consent",
+    "_slot_items",
     "load_truth",
     "safety",
     "safety_lines",

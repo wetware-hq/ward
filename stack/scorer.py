@@ -76,7 +76,8 @@ def zero_bad_accepted(h):
 
 
 def _artifact_text(art):
-    return art.get("letter") or art.get("legends") or ""
+    c = art.get("clinician_letter") or {}
+    return "\n".join(x for x in (art.get("letter") or art.get("legends") or "", c.get("letter", "")) if x)
 
 
 def _line_text(line_id):
@@ -181,8 +182,22 @@ def outputs(h, art, truth):
             ok = hit is not None and h.peek(hit[0])["answers"].get(item) not in (None, "unanswered")
         elif sec.startswith("clinician queue"):
             surf = "\n".join(q for eid in h.episodes for q in _queue_text(h, eid))
-            want = row.get("value") or _line_text(row.get("source_line", ""))
-            ok = bool(want) and _fill_match(want, surf)
+            tmpl = _line_text(row.get("source_line", "")) or ""
+            slot = re.search(r"\[[^\]]*\]", item)
+            if slot and row.get("value") and slot.group(0) in tmpl:
+                # the truth names the slot's items by id; forms fills it with number and text (R8-03)
+                ok = _slot_items(h, tmpl, slot.group(0), row["value"], surf)
+            else:
+                want = row.get("value") or tmpl
+                ok = bool(want) and _fill_match(want, surf)
+        elif sec.startswith("cut from clinician letter"):
+            # sensitive answer: exported with its value (forms), absent from the clinician letter, and kept
+            # word for word in the patient letter (scenario test T3 checks the wording)
+            fs = [f for f in art.get("facts", []) if f.get("item_id") == item]
+            want = {"yes": True, "no": False}.get(str(row.get("value", "")).lower(), row.get("value"))
+            clin = (art.get("clinician_letter") or {}).get("letter", "")
+            ok = bool(fs) and fs[-1]["status"] == row.get("status", "answered") and fs[-1]["value"] == want \
+                and hit is not None and hit[2].q[item]["text"].rstrip("?") not in clin
         elif sec.startswith("patient view:"):
             ok = sec.split(":", 1)[1].strip() in views
         elif sec == "gallery" or t == "figure":
@@ -245,6 +260,19 @@ def _fill_match(template, text):
     pat = re.escape(template)
     pat = re.sub(r"\\\[[^\]]*?\\\]", ".+?", pat)
     return re.search(pat, text) is not None
+
+
+def _slot_items(h, template, slot, ids, surf):
+    """True if a queue entry is the template with its one slot filled by exactly these items, each written as
+    its question number and text."""
+    parts = []
+    for i in [x.strip() for x in ids.split(",") if x.strip()]:
+        hit = _find_item(h, i)
+        if hit is None or hit[1].kind != "forms":
+            return False
+        parts.append(f"{hit[3].index(i) + 1}. {hit[2].q[i]['text']}")
+    want = template.replace(slot, "; ".join(parts), 1)
+    return bool(parts) and want in surf.splitlines()
 
 
 def waiting_parent(h, item, text):

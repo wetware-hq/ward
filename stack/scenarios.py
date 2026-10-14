@@ -185,9 +185,9 @@ def s05(h, out, agent=None):
     dr.step(EP, A("review"))
     ph = {"mh_q1": ("feeling low on most days", None), "mh_q2": ("thoughts of harming yourself", "no thoughts of harming yourself"),
           "mh_q3": ("trouble sleeping", None)}
-    art = letter(h, os.path.join(out, "gp"), P, [EP], "GP", "update to GP", ph)
-    art["patient_letter"] = letter(h, os.path.join(out, "patient"), P, [EP], "Patient", "update to patient", ph,
-                                   privacy=True, audit=True)
+    gp = letter(h, os.path.join(out, "gp"), P, [EP], "GP", "update to GP", ph)       # the counted build (answer file)
+    art = letter(h, os.path.join(out, "patient"), P, [EP], "Patient", "update to patient", ph, privacy=True, audit=True)
+    art["clinician_letter"] = gp                                 # scored: sensitive cut + LT-SENSITIVE-ALERT-CLIN
     return art
 
 
