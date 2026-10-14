@@ -18,7 +18,7 @@ def need(sid):
         pytest.skip(scorer.PENDING)
     red = KNOWN_RED.get("S05" if sid == S05 else "")
     if red and os.environ.get("STACK_RUN_TRACES") != "1":
-        pytest.skip("known red, outside stack: " + red)
+        pytest.skip(f"known red, trace {sid}: " + red)
     return t
 
 

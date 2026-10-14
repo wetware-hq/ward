@@ -190,6 +190,8 @@ def outputs(h, art, truth):
             else:
                 want = row.get("value") or tmpl
                 ok = bool(want) and _fill_match(want, surf)
+        elif sec.startswith("cut from clinician letter"):
+            ok = _sensitive_cut(art, item, row) and hit is not None
         elif sec.startswith("patient view:"):
             ok = sec.split(":", 1)[1].strip() in views
         elif sec == "gallery" or t == "figure":
@@ -252,6 +254,81 @@ def _fill_match(template, text):
     pat = re.escape(template)
     pat = re.sub(r"\\\[[^\]]*?\\\]", ".+?", pat)
     return re.search(pat, text) is not None
+
+
+def _answer_line(letter_art, fact):
+    """The notes line the answer sits on: the one whose refs cite the fact's event, without its leading dash."""
+    ep, _, n = fact["event_id"].rpartition("#")
+    for line, refs in zip(letter_art.get("notes", "").splitlines(), letter_art.get("refs", [])):
+        if any(r.get("episode") == ep and str(r.get("event")) == n for r in refs):
+            return line.lstrip("- ").strip()
+    return None
+
+
+def _chain_items(src):
+    """Every item anywhere in a line's source chain (its direct source and everything it was worked out from)."""
+    if not isinstance(src, dict):
+        return set()
+    out = {src["item"]} if src.get("item") else set()
+    for c in src.get("chain") or []:
+        out |= _chain_items(c)
+    return out
+
+
+ALERT_TEMPLATE = "Safety alert: a sensitive safety concern was recorded. See record [event id]."
+GEN_ID = re.compile(r"[A-Z0-9]+(?:-[A-Z0-9]+)*-E\d+")          # environment's generated id: opaque prefix + counter
+
+
+def _clin_lines_from(c, item, alert_text):
+    """GP-letter lines (by [Ln] tag) whose source chain holds the item. One exemption, exactly once and only in the
+    GP letter: the signed sensitive alert line (kind sensitive_alert, nothing derived into it, exact signed text,
+    event id in the generated-id format). No source record at all counts as a failure."""
+    notes, srcs = c.get("notes", "").splitlines(), c.get("sources")
+    if srcs is None or len(srcs) != len(notes):
+        return ["no source record"]
+    gp = "Recipients: GP" in notes
+    m = re.fullmatch(re.escape(ALERT_TEMPLATE).replace(re.escape("[event id]"), r"(\S+)") + "", alert_text or "")
+    alert_ok = bool(m) and GEN_ID.fullmatch(m.group(1).rstrip(".")) is not None
+    used = sorted({int(n) for n in re.findall(r"\[L(\d+)\]", c.get("letter", ""))})
+    bad, alerts = [], []
+    for n in used:
+        if not 1 <= n <= len(notes):
+            bad.append(f"L{n}: no such notes line"); continue
+        src = srcs[n - 1]
+        if item not in _chain_items(src):
+            continue
+        if gp and alert_ok and src.get("from") == "sensitive_alert" and not src.get("chain") \
+                and notes[n - 1].lstrip("- ").strip() == alert_text:
+            alerts.append(f"L{n}"); continue
+        bad.append(f"L{n}")
+    if len(alerts) != 1:
+        bad += alerts or ["alert line missing"]
+    return bad
+
+
+def _sensitive_cut(art, item, row):
+    """A sensitive answer is exported with its value, kept word for word in the patient letter, and absent from
+    the GP letter. Main check: no GP-letter line has the item anywhere in its source chain (the signed alert line
+    with only the event id excepted). Second guard, plain text: the question and its answer together, as a pair."""
+    fs = [f for f in art.get("facts", []) if f.get("item_id") == item]
+    words = {"yes": True, "no": False}
+    want = words.get(str(row.get("value", "")).lower(), row.get("value"))
+    if not fs or fs[-1]["status"] != row.get("status", "answered") or fs[-1]["value"] != want or not fs[-1]["event_id"]:
+        return False
+    f = fs[-1]
+    line = _answer_line(art, f)
+    flat = lambda t: re.sub(r" \[(?:flag: [^\]]+|L\d+)\]", "", t or "")
+    if not line or line not in flat(art.get("letter")):
+        return False
+    c = art.get("clinician_letter") or {}
+    from .adapter import lt, letter_event_id
+    alert = lt("LT-SENSITIVE-ALERT-CLIN", **{"event id": letter_event_id(f["event_id"])})
+    if _clin_lines_from(c, item, alert):
+        return False
+    q = re.escape(f["text"].rstrip("?"))
+    word = {True: "Yes", False: "No"}.get(f["value"], str(f["value"]))
+    pair = rf"{q}\??\s*[:\-\u2013\u2014]?\s*(?:{re.escape(word)}\b|{re.escape(line)})"
+    return re.search(pair, flat(c.get("letter")), re.I) is None
 
 
 def _slot_items(h, template, slot, ids, surf):

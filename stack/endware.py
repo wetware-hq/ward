@@ -45,41 +45,47 @@ def letter(h, out, patient, episodes, reader, brief, phrases=None, privacy=None,
     head = {"trace_seq": [r["seq"] for r in h.trace if r.get("op") == "open" and r.get("episode") == episodes[0]][0]}
     fields = {k: [] for k in ("Problems", "Medicines", "Allergies", "Results", "Pending", "Actions")}
     history, question = [], None
-    lines_in = adapter.letter_lines(fs, audience, phrases or {})
+    srcs_in = []
+    lines_in = adapter.letter_lines(fs, audience, phrases or {}, srcs_in)
     for rid in notes:                         # logged clinician note lines (h.note), cited by trace seq
         r = h.records[rid]
         seq = [x["seq"] for x in h.trace if x["kind"] == "record" and x.get("record") == rid][-1]
         lines_in.append((r["field"], r["text"], [f"trace#{seq}"]))
-    for field, text, evs in lines_in:
+        srcs_in.append({"from": "clinician_record", "item": None, "event": f"trace#{seq}", "record": rid, "chain": []})
+    for (field, text, evs), sr in zip(lines_in, srcs_in):
         refs = [{"trace_seq": int(e.split("#")[1])} if e.startswith("trace#") else _ref(h, e) for e in evs]
         if field == "Question":
-            question = (text, refs)
+            question = (text, refs, sr)
         elif field in fields:
-            fields[field].append((text, refs))
+            fields[field].append((text, refs, sr))
         else:
-            history.append((text, refs))
-    lines, refs = [], []
+            history.append((text, refs, sr))
+    lines, refs, sources = [], [], []
+    plain = {"from": "header", "item": None, "event": None, "chain": []}
 
-    def add(t, r):
-        lines.append(t); refs.append(r)
+    def add(t, r, s=plain):
+        lines.append(t); refs.append(r); sources.append(s)
     date = h.clock.date().isoformat()
     add(f"Patient: {patient}", [head]); add(f"Date: {date}", [head]); add(f"Recipients: {reader}", [head])
-    add(f"Question: {question[0] if question else 'none'}", question[1] if question else [head])
+    add(f"Question: {question[0] if question else 'none'}", question[1] if question else [head],
+        question[2] if question else plain)
     add("Problems:", [])
-    for t, r in fields["Problems"]:
-        add(f"- {t}", r)
-    add("History: " + ("; ".join(t.rstrip(".") for t, _ in history) if history else "none recorded"),
-        [x for _, r in history for x in r] or [head])
+    for t, r, sr in fields["Problems"]:
+        add(f"- {t}", r, sr)
+    # a summary line carries the full source record of every line it was worked out from
+    add("History: " + ("; ".join(t.rstrip(".") for t, _, _ in history) if history else "none recorded"),
+        [x for _, r, _ in history for x in r] or [head],
+        {"from": "summary", "item": None, "event": None, "chain": [sr for _, _, sr in history]} if history else plain)
     for k in ("Medicines", "Allergies", "Results", "Pending", "Actions"):
         add(f"{k}:", [])
-        for t, r in fields[k]:
-            add(f"- {t}", r)
-    res = run_letter_text(h, "\n".join(lines) + "\n", refs, brief, out, privacy, audit=audit)
+        for t, r, sr in fields[k]:
+            add(f"- {t}", r, sr)
+    res = run_letter_text(h, "\n".join(lines) + "\n", refs, brief, out, privacy, audit=audit, sources=sources)
     res.update(facts=fs, wording=adapter.wording_status())
     return res
 
 
-def run_letter_text(h, text, refs, brief, outdir, privacy=None, audit=False):
+def run_letter_text(h, text, refs, brief, outdir, privacy=None, audit=False, sources=None):
     os.makedirs(outdir, exist_ok=True)
     with tempfile.TemporaryDirectory() as td:
         p = os.path.join(td, "notes.txt")
@@ -92,8 +98,9 @@ def run_letter_text(h, text, refs, brief, outdir, privacy=None, audit=False):
     letter = open(os.path.join(outdir, "letter.md")).read() if r.returncode == 0 else ""
     h._emit("endware", tool="letters", brief=brief, exit=r.returncode, **({"audit": True} if audit else {}))
     with open(os.path.join(outdir, "notes.refs.json"), "w") as f:
-        json.dump({"notes": text.splitlines(), "refs": refs}, f, indent=1)
+        json.dump({"notes": text.splitlines(), "refs": refs, **({"sources": sources} if sources is not None else {})}, f, indent=1)
     return {"tool": "letters", "brief": brief, "exit": r.returncode, "letter": letter, "notes": text, "refs": refs,
+            **({"sources": sources} if sources is not None else {}),
             "screen": r.stdout + r.stderr, "path": os.path.join(outdir, "letter.md")}
 
 

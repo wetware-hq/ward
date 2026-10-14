@@ -103,43 +103,51 @@ def letter_event_id(event_id):
     return f"{ep.removeprefix('SYNTH-')}-E{n}"
 
 
-def letter_lines(fs, audience, phrases):
+def letter_lines(fs, audience, phrases, sources=None):
     """Facts -> (field, text, event ids) for the notes file. audience: 'patient' or 'clinician'.
-    phrases: item_id -> (text if yes, text if no) for answered questions (scenario wording, not status wording)."""
+    phrases: item_id -> (text if yes, text if no) for answered questions (scenario wording, not status wording).
+    sources: if a list, one source record per line is appended: what the line was built from (kind, item, event)."""
     from .harness import AGENT_ROLES  # noqa: F401
     rel = __import__("stack.loader", fromlist=["forms"]).forms()._deps["messages"].RELATIONSHIP
     out = []
+    src = sources if sources is not None else []
+
+    class _Out(list):
+        def append(self, line, kind=None):
+            super().append(line)
+            src.append({"from": kind, "item": f.get("item_id"), "event": f.get("event_id") or None, "chain": []})
+    out = _Out()
     for f in fs:
         ev = [f["event_id"]] if f["event_id"] else []
         if "record" in f:
-            out.append((f["field"], f["text"], ev)); continue
+            out.append((f["field"], f["text"], ev), "record"); continue
         q = f["text"].rstrip("?")
         if f["sensitive"] and audience != "patient":
             # leak guard: a sensitive answer's text never goes into clinician notes; the alert line and the
             # event id stand in its place, whatever the status
-            out.append(("Problems", lt("LT-SENSITIVE-ALERT-CLIN", **{"event id": letter_event_id(f["event_id"]) if f["event_id"] else "none"}), ev))
+            out.append(("Problems", lt("LT-SENSITIVE-ALERT-CLIN", **{"event id": letter_event_id(f["event_id"]) if f["event_id"] else "none"}), ev), "sensitive_alert")
             continue
         if f["status"] in ("declined", "unknown", "stale"):
             st = "unknown" if f["status"] == "stale" else f["status"]
             key = f"LT-{st.upper()}-{'PT' if audience == 'patient' else 'CLIN'}"
             if f["safety"] and key + "-SAFETY" in lt_lines():
                 key += "-SAFETY"
-            out.append(("Problems", lt(key, question=q, **{"question plain wording": q}), ev))
+            out.append(("Problems", lt(key, question=q, **{"question plain wording": q}), ev), "status")
         else:
             yes, no = phrases.get(f["item_id"], (None, None))
             t = yes if f["value"] else no
             if t:
-                out.append(("Problems", t, ev))
+                out.append(("Problems", t, ev), "answer")
         if f["on_behalf"]:
             r = rel[f["on_behalf"]]
             if audience == "patient":
-                out.append(("History", lt("LT-ONBEHALF-PT", **{"relationship, patient term": r[0]}), ev))
+                out.append(("History", lt("LT-ONBEHALF-PT", **{"relationship, patient term": r[0]}), ev), "on_behalf")
             else:
                 out.append(("History", lt("LT-ONBEHALF-CLIN", **{"relationship, clinician term": r[1],
-                                                                  "discipline": f["answered_by"].split(", ")[-1]}), ev))
+                                                                  "discipline": f["answered_by"].split(", ")[-1]}), ev), "on_behalf")
         if f["interpreter"] and audience != "patient":
-            out.append(("History", lt("LT-INTERP-CLIN"), ev))
-    return out
+            out.append(("History", lt("LT-INTERP-CLIN"), ev), "interpreter")
+    return list(out)
 
 
 def figures_csv(fs, pack):

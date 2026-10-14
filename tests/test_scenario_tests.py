@@ -114,7 +114,7 @@ def test_t4_broken(decl, broken):
 
 def test_all_s05_tests_implemented_t5_pending_review(decl):
     assert set(st.IMPLEMENTED) == set(decl)
-    assert st.REVIEWED == set(decl) - {"S05-T5-paraphrase-on-sensitive-step"}    # T5 awaits Physician's check
+    assert st.REVIEWED == set(decl)                                         # all five signed by Physician
 
 
 def test_t5_check_logic(decl):

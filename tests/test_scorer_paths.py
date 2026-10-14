@@ -297,3 +297,116 @@ def test_artifact_text_includes_clinician_letter():
     assert scorer._artifact_text({"legends": "L"}) == "L"
     assert scorer._artifact_text({"clinician_letter": {"letter": "B"}}) == "B"
     assert scorer._artifact_text({}) == ""
+
+
+# ---- sensitive answer cut (unit)
+EV = f"{EPI}#5"
+ALERT = None
+
+
+def alert():
+    return adapter.lt("LT-SENSITIVE-ALERT-CLIN", **{"event id": adapter.letter_event_id(EV)})
+
+
+HDR = ("Recipients: GP", {"from": "header", "item": None, "chain": []})
+ALINE = lambda: (f"- {alert()}", {"from": "sensitive_alert", "item": "c", "chain": []})
+
+
+def gp(lines=None, letter=None):
+    lines = lines if lines is not None else [HDR, ALINE()]
+    return {"notes": "\n".join(t for t, _ in lines), "sources": [s for _, s in lines],
+            "letter": letter if letter is not None else "\n".join(f"{t} [L{n}]" for n, (t, _) in enumerate(lines, 1))}
+
+
+def cut_art(letter="- hurt thoughts [L6]", clin=None, facts=None, notes="P\n- hurt thoughts", refs=None):
+    return {"letter": letter, "notes": notes, "refs": refs if refs is not None else [[{"trace_seq": 1}], [{"episode": EPI, "event": 5}]],
+            "facts": facts if facts is not None else [{"item_id": "c", "status": "answered", "value": True, "event_id": EV, "text": "Hurt?"}],
+            "clinician_letter": clin if clin is not None else gp()}
+
+
+ROW = {"item": "c", "value": "Yes", "status": "answered"}
+
+
+def test_answer_line_by_event():
+    assert scorer._answer_line(cut_art(), {"event_id": EV}) == "hurt thoughts"
+    assert scorer._answer_line(cut_art(), {"event_id": f"{EPI}#4"}) is None
+    assert scorer._answer_line(cut_art(), {"event_id": "SYNTH-X#5"}) is None
+    assert scorer._answer_line(cut_art(notes="P\n  - x y "), {"event_id": EV}) == "x y"
+
+
+def test_chain_items():
+    assert scorer._chain_items({"item": "a", "chain": [{"item": None, "chain": [{"item": "b"}]}, {"item": "c"}]}) == {"a", "b", "c"}
+    assert scorer._chain_items({"item": None}) == set() and scorer._chain_items(None) == set()
+
+
+def test_clin_lines_from_provenance():
+    A = alert()
+    f = lambda lines, **k: scorer._clin_lines_from(gp(lines, **k), "c", A)
+    assert f(None) == []
+    assert scorer._clin_lines_from({"notes": "x", "letter": ""}, "c", A) == ["no source record"]
+    assert scorer._clin_lines_from({"notes": "x\ny", "sources": [{}], "letter": ""}, "c", A) == ["no source record"]
+    deep = {"from": "summary", "item": None, "chain": [{"from": "flag", "item": None, "chain": [{"from": "answer", "item": "c"}]}]}
+    assert f([HDR, ALINE(), ("- Screen positive", deep)]) == ["L3"]
+    assert f([HDR, ALINE(), ("- x", {"from": "answer", "item": "c", "chain": []})]) == ["L3"]
+    assert f([HDR, ALINE(), ("- x", {"from": "answer", "item": "d", "chain": []})]) == []
+    # the exemption: exact signed text, kind sensitive_alert, nothing derived, GP letter, exactly once
+    assert f([HDR, (f"- {A} extra", {"from": "sensitive_alert", "item": "c", "chain": []})]) == ["L2", "alert line missing"]
+    assert f([HDR, (f"- {A}", {"from": "answer", "item": "c", "chain": []})]) == ["L2", "alert line missing"]
+    assert f([HDR, (f"- {A}", {"from": "sensitive_alert", "item": "c", "chain": [{"item": "c"}]})]) == ["L2", "alert line missing"]
+    assert f([HDR, ALINE(), ALINE()]) == ["L2", "L3"]
+    assert f([HDR]) == ["alert line missing"]
+    assert f([("Recipients: Patient", {}), ALINE()]) == ["L2", "alert line missing"]
+    for bad in ("Safety alert: a sensitive safety concern was recorded. See record mh_q2-E5.",
+                "Safety alert: a sensitive safety concern was recorded. See record EP-0501.",
+                "Safety alert: a sensitive safety concern was recorded. See record ep-0501-E5.",
+                "Safety alert: a sensitive concern was recorded. See record EP-0501-E5."):
+        line = ("- " + bad, {"from": "sensitive_alert", "item": "c", "chain": []})
+        assert scorer._clin_lines_from(gp([HDR, line]), "c", bad) == ["L2", "alert line missing"], bad
+    # only lines the letter uses count; a tag past the notes fails
+    assert f([HDR, ALINE(), ("- x", {"from": "answer", "item": "c", "chain": []})], letter="R [L1] [L2]") == []
+    assert f([HDR, ALINE()], letter="[L2] [L4]") == ["L4: no such notes line"]
+    assert f([HDR, ALINE()], letter="[L2] [L0]") == ["L0: no such notes line"]
+
+
+def test_sensitive_cut_paths():
+    assert scorer._sensitive_cut(cut_art(), "c", ROW)
+    assert scorer._sensitive_cut(cut_art(letter="- hurt thoughts [flag: x] [L6]"), "c", ROW)
+    bad = gp([HDR, ALINE(), ("- x", {"from": "answer", "item": "c", "chain": []})])
+    assert not scorer._sensitive_cut(cut_art(clin=bad), "c", ROW)
+    for extra in ("Hurt? Yes", "hurt: yes", "Hurt \u2014 Yes", "Hurt? hurt thoughts"):
+        c = gp(); c["letter"] += "\n" + extra
+        assert not scorer._sensitive_cut(cut_art(clin=c), "c", ROW), extra
+    for extra in ("Yes, plan agreed.", "Hurt was discussed", "hurt thoughts", "Hurt? Yesterday"):
+        c = gp(); c["letter"] += "\n" + extra
+        assert scorer._sensitive_cut(cut_art(clin=c), "c", ROW), extra
+    assert not scorer._sensitive_cut(cut_art(letter="- hurting thoughts"), "c", ROW)
+    assert not scorer._sensitive_cut(cut_art(facts=[]), "c", ROW)
+    f = cut_art()["facts"][0]
+    for b in (dict(f, value=False), dict(f, status="declined"), dict(f, event_id="")):
+        assert not scorer._sensitive_cut(cut_art(facts=[b]), "c", ROW)
+    assert scorer._sensitive_cut(cut_art(facts=[dict(f, value=False), f]), "c", ROW)
+    assert not scorer._sensitive_cut(cut_art(refs=[]), "c", ROW)
+    no = dict(f, value=False)
+    c = gp(); c["letter"] += "\nHurt? No"
+    assert not scorer._sensitive_cut(cut_art(facts=[no], clin=c), "c", dict(ROW, value="No"))
+    c = gp(); c["letter"] += "\nHurt? Yes"
+    assert scorer._sensitive_cut(cut_art(facts=[no], clin=c), "c", dict(ROW, value="No"))
+    assert scorer._sensitive_cut(cut_art(facts=[dict(f, value="2")]), "c", dict(ROW, value="2"))
+    assert not scorer._sensitive_cut(cut_art(), "c", dict(ROW, status="declined"))
+    assert scorer._sensitive_cut(cut_art(), "c", {"item": "c", "value": "yes"})
+    assert not scorer._sensitive_cut(dict(cut_art(), clinician_letter={}), "c", ROW)
+
+
+def test_letter_lines_record_sources():
+    fs = [{"item_id": "s", "event_id": "E#1", "text": "S?", "sensitive": True, "status": "answered", "value": True,
+           "safety": True, "on_behalf": "", "interpreter": False},
+          {"item_id": "q", "event_id": "E#2", "text": "Q?", "sensitive": False, "status": "answered", "value": True,
+           "safety": False, "on_behalf": "", "interpreter": True},
+          {"item_id": "d", "event_id": "", "text": "D?", "sensitive": False, "status": "declined", "value": None,
+           "safety": False, "on_behalf": "", "interpreter": False}]
+    src = []
+    out = adapter.letter_lines(fs, "clinician", {"q": ("q yes", "q no")}, src)
+    assert len(src) == len(out) and isinstance(out, list)
+    assert [(s["from"], s["item"], s["event"]) for s in src] == [("sensitive_alert", "s", "E#1"), ("answer", "q", "E#2"),
+                                                               ("interpreter", "q", "E#2"), ("status", "d", None)]
+    assert adapter.letter_lines(fs, "clinician", {"q": ("q yes", "q no")}) == out

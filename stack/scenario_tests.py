@@ -8,7 +8,8 @@ from .harness import Harness
 from . import adapter, loader
 
 PENDING_REVIEW = "pending_review"
-REVIEWED = {"S05-T1-unconfirmed", "S05-T2-changed", "S05-T3-sensitive-cut", "S05-T4-decline"}   # signed by Physician
+REVIEWED = {"S05-T1-unconfirmed", "S05-T2-changed", "S05-T3-sensitive-cut", "S05-T4-decline",
+            "S05-T5-paraphrase-on-sensitive-step"}   # signed by Physician
 MH_CASE = None                            # set lazily: stack cases/mood_screen.toml
 EP, P, AGENT = "SYNTH-EP-0591", "SYNTH-P0591", "SYNTH-agent-0591"
 

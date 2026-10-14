@@ -25,8 +25,12 @@ def main(argv):
             for m in rx.finditer(text):
                 problems.append(f"{f}:{text.count(chr(10), 0, m.start()) + 1}: internal name or path")
     for args in (["tests/test_safety_functions.py"], []):
-        if subprocess.run([sys.executable, "-m", "pytest", "-q", "-p", "no:cacheprovider", *args], cwd=ROOT).returncode:
+        r = subprocess.run([sys.executable, "-m", "pytest", "-q", "-rs", "-p", "no:cacheprovider", *args], cwd=ROOT,
+                           capture_output=True, text=True)
+        print(r.stdout.strip().splitlines()[-1] if r.stdout.strip() else r.stderr.strip()[-300:])
+        if r.returncode:
             problems.append("pytest failed" + (f" ({args[0]})" if args else ""))
+        problems += [f"skipped: {l.split(': ', 1)[-1]}" for l in r.stdout.splitlines() if l.startswith("SKIPPED")]
     for x in problems:
         print(x)
     print(f"prepush: {len(problems)} problems")
