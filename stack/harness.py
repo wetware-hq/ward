@@ -6,7 +6,7 @@ from . import loader, locales
 
 SYNTH_ID = re.compile(r"SYNTH-[A-Za-z0-9-]+")
 COUNTED = "call"          # trace kind of an actor call
-COUNTED_OPS = {"open", "check", "export", "replay", "record_result"}   # harness ops that count (truth: "harness: reset/check/...")
+COUNTED_OPS = {"open", "check", "export", "export_refused", "replay", "record_result"}   # harness ops that count (truth: "harness: reset/check/...")
 AGENT_ROLES = ("patient_agent", "clinician_agent")
 CLINICIAN_ROLES = ("clinician",)          # who may still act in a blocked episode
 
@@ -149,7 +149,7 @@ class Harness:
         blocked = list(ep.blocks)
         x = None if blocked else self.export(episode_id)
         if blocked:
-            self._emit("harness", op="export_refused", episode=episode_id, blocks=blocked)
+            self._emit("harness", op="export_refused", episode=episode_id, blocks=blocked)   # counted (truth path)
         env = self._replayed(ep)
         items = ([dict(q) for q in env.schema["question"]] if ep.kind == "forms" else [dict(j) for j in env.lst["job"]])
         interp = sorted(i for r in self.calls() if r.get("episode") == episode_id and r.get("interpreter_used")
@@ -219,6 +219,10 @@ class Harness:
                 return self._out(h, rec, {"accepted": False, "block": b, "by": "locale",
                                           "reason": locales.line(b, language=self.language, **{"locale pack": self.pack})})
             rec.update(interpreter_used=True, blocked_for_output=list(ep.blocks))
+            mod = loader.forms() if ep.kind == "forms" else loader.orders()
+            t = args[0].get("type") if method == "step" and isinstance(args[0], dict) else None
+            if t and "interpreter" in getattr(mod, "OPTIONAL", {}).get(t, set()):
+                args = [dict(args[0], interpreter=True)]     # middleware field, where it exists (round 8)
         env = self._replayed(ep, h.actor, h.role, h.discipline, h.scope)
         before = len(env.log)
         if method == "step" and isinstance(args[0], dict):

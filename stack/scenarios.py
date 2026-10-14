@@ -99,9 +99,12 @@ def s02(h, out):
 # ---------------------------------------------------------------- S03 / S03b
 def _s03(h, out, P, EO):
     h.open_episode("orders", CASE("pharmacy_discharge_reconciliation"), EO, P, needs=("pack",))
-    if (b := stop_if_blocked(h, P, EO, out)):
-        return b
     ph = h.session("SYNTH-ph-03", "clinician", P, discipline="pharmacy")
+    if h.blocked(EO):                         # blocked for output: the clinician still records, output refused
+        ph.step(EO, A("approve"))
+        ph.step(EO, tick("reconcile", "SYNTH-RX-0002"))
+        ph.step(EO, tick("counsel_patient", "SYNTH-RX-0003"))
+        return letter(h, out, P, [EO], "GP", "update to GP")
     md = h.session("SYNTH-dr-03", "clinician", P, discipline="medicine")
     ag = h.session("SYNTH-agent-03", "clinician_agent", P, scope=("pharmacy",))
     ph.step(EO, A("approve"))
@@ -132,8 +135,6 @@ def s03b(h, out):
 def s04(h, out):
     P, EF = "SYNTH-P0401", "SYNTH-EP-0401"
     h.open_episode("forms", FORMS_EX("physio_falls_risk"), EF, P, needs=("pack",))
-    if (b := stop_if_blocked(h, P, EF, out)):
-        return b
     pt = h.session("SYNTH-pt-04", "clinician", P, discipline="physiotherapy")
     md = h.session("SYNTH-dr-04", "clinician", P, discipline="medicine")
     pt.step(EF, A("approve"))
@@ -177,8 +178,9 @@ def _s06(h, out, P, EP):
     dr = h.session("SYNTH-dr-06", "clinician", P, discipline="medicine")
     pa = h.session(P, "patient", P)
     dr.step(EP, A("approve"))
-    if h.blocked(EP):                        # no signed term: the on_behalf answer is refused, output refused
-        dr.step(EP, answer("allergy_any", True, on_behalf="sdm"))
+    if h.blocked(EP):                        # blocked for output: clinician answers with an interpreter
+        dr.step(EP, answer("allergy_any", True))
+        dr.step(EP, answer("allergy_reaction_severe", False))
         return letter(h, out, P, [EP], "Patient", "update to patient", privacy=True)
     probe(h, lambda: dr.step(EP, answer("smokes", False, on_behalf="carer")))
     probe(h, lambda: pa.step(EP, answer("smokes", False, on_behalf="sdm")))
@@ -258,9 +260,10 @@ def s09(h, out):
 # ---------------------------------------------------------------- S10 / S10b (figure)
 def _s10(h, out, P, EO):
     h.open_episode("orders", CASE("crp_series"), EO, P, needs=("pack",))
-    if (b := stop_if_blocked(h, P, EO, out, figure=True)):
-        return b
     dr = h.session("SYNTH-dr-10", "clinician", P, discipline="medicine")
+    if h.blocked(EO):                         # blocked for output: the result is recorded, the figure refused
+        h.record_result("SYNTH-dr-10", "SYNTH-REC-1001", P, "CRP", "1937-10-01T08:00:00", 180, "mg/L")
+        return run_figure(h, P, EO, ["SYNTH-REC-1001"], "1937-10-16T08:00:00", out)
     ag = h.session("SYNTH-agent-10", "clinician_agent", P, scope=("medicine",))
     dr.step(EO, A("approve"))
     for d, (rid, v) in enumerate([("SYNTH-REC-1001", 180), ("SYNTH-REC-1002", 120), ("SYNTH-REC-1003", 70)], 1):
