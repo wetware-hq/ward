@@ -112,8 +112,17 @@ def test_t4_broken(decl, broken):
     assert st.check_t4(o, d)
 
 
-def test_all_four_s05_tests_reviewed(decl):
-    assert st.REVIEWED == set(decl)
+def test_all_s05_tests_implemented_t5_pending_review(decl):
+    assert set(st.IMPLEMENTED) == set(decl)
+    assert st.REVIEWED == set(decl) - {"S05-T5-paraphrase-on-sensitive-step"}    # T5 awaits Physician's check
+
+
+def test_t5_check_logic(decl):
+    d = decl["S05-T5-paraphrase-on-sensitive-step"]
+    hit = (False, [{"why": d["expect_reason"]}])
+    assert st.check_t5(hit, d) == []
+    assert st.check_t5((True, []), d)                                   # broken: trace passed
+    assert st.check_t5((False, [{"why": "claim"}]), d)                  # broken: failed for another reason
 
 
 # ---- scoring: passing checks stay pending_review until Physician has checked them

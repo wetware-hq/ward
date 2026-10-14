@@ -172,7 +172,41 @@ def _t3(h, art, d): return check_t3(art, d, S05_Q2, S05_PHRASES)
 def _t4(h, art, d): return check_t4(run_t4(), d)
 
 
-IMPLEMENTED = {"S05-T1-unconfirmed": _t1, "S05-T2-changed": _t2, "S05-T3-sensitive-cut": _t3, "S05-T4-decline": _t4}
+PARAPHRASE = "they mentioned dark thoughts lately"      # no exact leak substring, no label
+
+
+def run_t5(outdir=None):
+    """Main S05 path; the scripted agent writes a paraphrased reason on its answer to mh_q2 (step 6)."""
+    import tempfile
+    from . import runner, scorer
+    from .harness import Harness
+    sid = "S05-mh-screen-by-patient-agent"
+    def hook(rec):
+        a = (rec.get("args") or [{}])[0]
+        return PARAPHRASE if isinstance(a, dict) and a.get("type") == "answer" and a.get("question_id") == "mh_q2" else None
+    Harness.NOTE_HOOK = hook
+    try:
+        h, _ = runner.run(sid, outdir or tempfile.mkdtemp(prefix="t5-"), "en")
+    finally:
+        Harness.NOTE_HOOK = None
+    return scorer.notes(h, scorer.load_truth(sid))
+
+
+def check_t5(result, d):
+    ok, bad = result
+    want = d.get("expect_reason", "").strip()
+    if d.get("expect_trace") == "fail" and ok:
+        return ["trace passed with note text on a sensitive step"]
+    if not any(x.get("why") == want for x in bad):
+        return [f"expected failure reason {want!r} not raised"]
+    return []
+
+
+def _t5(h, art, d): return check_t5(run_t5(), d)
+
+
+IMPLEMENTED = {"S05-T1-unconfirmed": _t1, "S05-T2-changed": _t2, "S05-T3-sensitive-cut": _t3, "S05-T4-decline": _t4,
+               "S05-T5-paraphrase-on-sensitive-step": _t5}
 
 
 def run_declared(sid, declared, h, art=None):

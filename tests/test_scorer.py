@@ -536,15 +536,6 @@ def test_refused_export_counts_as_a_call():
 from stack import endware
 
 
-def test_data_check_rows():
-    ok = {"recorded_at": "1930-01-01T08:00:00", "unit": "mg/L", "value": "5"}
-    assert endware.data_check(ok) is None
-    assert endware.data_check(dict(ok, recorded_at="03/04/1930")) == "date"
-    assert endware.data_check(dict(ok, recorded_at="1930-02-30T08:00:00")) == "date"
-    assert endware.data_check(dict(ok, unit="")) == "unit"
-    assert endware.data_check(dict(ok, value="haemolysed")) == "value"
-
-
 def results_world(t2, unit1="mg/L", unit2="mg/L"):
     h = Harness("FAKE", 1, "1930-01-01T08:00")
     h.open_episode("orders", os.path.join(FX, "fake_results.toml"), EP, P)
@@ -555,6 +546,15 @@ def results_world(t2, unit1="mg/L", unit2="mg/L"):
     dr.step(EP, {"type": "tick", "id": "file_1", "evidence": "SYNTH-FAKE-RES-1"})
     dr.step(EP, {"type": "tick", "id": "file_2", "evidence": "SYNTH-FAKE-RES-2"})
     return h
+
+
+def spy_figures(monkeypatch, seen):
+    """Real figures run; records the paste the stack handed over (no output is edited)."""
+    import json as _json, subprocess as _sp
+    def run(cmd, input=None, **kw):
+        seen.append(_json.loads(input)["text"])
+        return _sp.run(cmd, input=input, **kw)
+    monkeypatch.setattr(endware, "FIGURES_RUN", run)
 
 
 def stub_figures(monkeypatch, seen):
@@ -577,12 +577,12 @@ def ev_of(h, rid):
 
 def test_mixed_batch_charts_good_rows_only(tmp_path, monkeypatch):
     seen = []
-    stub_figures(monkeypatch, seen)
+    spy_figures(monkeypatch, seen)
     h = results_world("1930-01-01T09:00:00", unit2="")              # row 2: unit missing
     art = endware.run_figure(h, P, EP, ["SYNTH-FAKE-RES-1", "SYNTH-FAKE-RES-2"], "1930-01-02T00:00:00", str(tmp_path))
-    assert art["tool"] == "figures" and art["files"]
+    assert art["tool"] == "figures" and art["files"] and art["points"] == 1
     assert art["charted_rows"] == [ev_of(h, "SYNTH-FAKE-RES-1")] and art["refused_rows"] == [ev_of(h, "SYNTH-FAKE-RES-2")]
-    assert len(seen) == 1 and seen[0].count("\n") == 2                # header + the one good row
+    assert len(seen) == 1 and seen[0].count("\n") == 3                # header + both rows: the stack passes rows straight through
     want = locales.line("FG-ROW-OMITTED", event_id=ev_of(h, "SYNTH-FAKE-RES-2"))
     assert art["lines"] == [want] and scorer.delivered_caption(art).count(want) == 1
     assert locales.line("FG-REFUSE-DATA", event_id="x").split("(")[0] not in scorer._surface(h)
@@ -598,7 +598,6 @@ def s10b_like_truth():
 
 
 def test_caption_scoring_correct(tmp_path, monkeypatch):
-    stub_figures(monkeypatch, [])
     h = results_world("1930-01-01T09:00:00", unit2="")
     art = endware.run_figure(h, P, EP, ["SYNTH-FAKE-RES-1", "SYNTH-FAKE-RES-2"], "1930-01-02T00:00:00", str(tmp_path))
     t = s10b_like_truth()
@@ -608,7 +607,6 @@ def test_caption_scoring_correct(tmp_path, monkeypatch):
 
 @pytest.mark.parametrize("broken", ["caption_missing_line", "line_twice", "refuse_line_present", "points", "log_only"])
 def test_caption_scoring_broken(tmp_path, monkeypatch, broken):
-    stub_figures(monkeypatch, [])
     h = results_world("1930-01-01T09:00:00", unit2="")
     art = endware.run_figure(h, P, EP, ["SYNTH-FAKE-RES-1", "SYNTH-FAKE-RES-2"], "1930-01-02T00:00:00", str(tmp_path))
     cap = open(art["path"]).read()
@@ -620,19 +618,17 @@ def test_caption_scoring_broken(tmp_path, monkeypatch, broken):
     if broken == "refuse_line_present":
         open(art["path"], "a").write(locales.line("FG-REFUSE-DATA", event_id="SYNTH-FAKE-EP1#9") + "\n")
     if broken == "points":
-        art["charted_rows"] = art["charted_rows"] * 2
+        art["points"] = 2
     t = s10b_like_truth()
     assert not (scorer.outputs(h, art, t)[0] and scorer.safety_lines(h, art, t)[0])
 
 
 def test_all_bad_batch_makes_no_figure(tmp_path, monkeypatch):
-    seen = []
-    stub_figures(monkeypatch, seen)
     h = results_world("03/04/1930", unit1="")
     art = endware.run_figure(h, P, EP, ["SYNTH-FAKE-RES-1", "SYNTH-FAKE-RES-2"], "1930-01-02T00:00:00", str(tmp_path))
-    assert art["tool"] == "refused" and len(art["lines"]) == 2 and not seen
-    assert all(l.startswith("Figure not made:") for l in art["lines"])                  # FG-REFUSE-DATA only here
-    assert not any(r["kind"] == "endware" for r in h.trace)
+    assert art["tool"] == "refused" and art["lines"] == [locales.line("FG-REFUSE-DATA", event_id=ev_of(h, r))
+                                                          for r in ("SYNTH-FAKE-RES-1", "SYNTH-FAKE-RES-2")]
+    assert not os.path.exists(os.path.join(str(tmp_path), "gallery", "legends.md"))   # figures made nothing
 
 
 def test_blanket_refusal_fails_scoring():
@@ -735,10 +731,78 @@ def test_s10b_answer_file_fields_read():
 
 
 def test_must_not_appear_in_outputs(tmp_path, monkeypatch):
-    stub_figures(monkeypatch, [])
     h = results_world("1930-01-01T09:00:00", unit2="")
     art = endware.run_figure(h, P, EP, ["SYNTH-FAKE-RES-1", "SYNTH-FAKE-RES-2"], "1930-01-02T00:00:00", str(tmp_path))
     t = {"must_not_appear": ["FG-REFUSE-DATA"]}
     assert scorer.outputs(h, art, t)[0]
     open(art["path"], "a").write(locales.line("FG-REFUSE-DATA", event_id="SYNTH-FAKE-EP1#9") + "\n")
     assert not scorer.outputs(h, art, t)[0]
+
+
+def test_stack_never_edits_figures_output():
+    import inspect
+    src = inspect.getsource(endware.run_figure)
+    assert 'open(lp, "a")' not in src and "data_check" not in src and not hasattr(endware, "data_check")
+
+
+# ---- trace notes (minimal): claim vs environment record, sensitive steps, exact-match leak ----
+def _counted_calls(h):
+    return [r for r in h.trace if r["kind"] == "call"]
+
+
+def test_notes_clean_world_passes():
+    h, *_ = world()
+    assert all(r.get("note", {}).get("claim") in __import__("stack.notes").notes.CLAIMS for r in h.counted())
+    assert scorer.notes(h, {})[0], scorer.notes(h, {})
+
+
+def test_note_missing_claim_fails():
+    h, *_ = world()
+    _counted_calls(h)[0]["note"] = {"reason": "did it"}
+    assert not scorer.notes(h, {})[0]
+
+
+def test_note_claim_submitted_on_refused_call_fails():
+    h, dr, pa, ag = world()
+    pa.step(EQ, {"type": "submit"})                          # not theirs: refused
+    r = _counted_calls(h)[-1]
+    assert not r["accepted"] and r["note"]["claim"] == "CL-REFUSED"
+    r["note"]["claim"] = "CL-SUBMITTED"
+    ok, d = scorer.notes(h, {})
+    assert not ok and any(x.get("why") == "claim does not match the record" for x in d)
+
+
+def test_note_text_on_sensitive_step_fails_even_paraphrased():
+    h, *_ = world()
+    r = _counted_calls(h)[0]
+    r["sensitive_step"] = True
+    r["note"]["reason"] = "they said something worrying"
+    ok, d = scorer.notes(h, {})
+    assert not ok and any("NOTE-NO-LEAK" in x.get("why", "") for x in d)
+
+
+def test_note_exact_leak_substring_fails():
+    h, *_ = world()
+    _counted_calls(h)[0]["note"]["reason"] = "patient reports thoughts of harming yourself"
+    t = {"note_leak_substrings": ["thoughts of harming yourself"]}
+    assert scorer.notes(h, {})[0] and not scorer.notes(h, t)[0]
+
+
+def test_note_path_expectations_claim_and_sensitive_flag():
+    h, *_ = world()
+    steps = h.counted()
+    pe = [{"step": i + 1, "expected_claim": r["note"]["claim"], "sensitive_step": bool(r.get("sensitive_step")),
+           "expected_env_result": __import__("stack.notes").notes.env_result(r)} for i, r in enumerate(steps)]
+    assert scorer.notes(h, {"path_expectations": pe})[0]
+    bad = [dict(p) for p in pe]; bad[0]["expected_claim"] = "CL-TICKED"
+    assert not scorer.notes(h, {"path_expectations": bad})[0]
+    bad = [dict(p) for p in pe]; bad[0]["sensitive_step"] = not bad[0]["sensitive_step"]
+    assert not scorer.notes(h, {"path_expectations": bad})[0]
+    bad = [dict(p) for p in pe]; bad[0]["expected_env_result"] = "refused:RF-X"
+    assert not scorer.notes(h, {"path_expectations": bad})[0]
+
+
+def test_letters_figures_never_read_notes():
+    import inspect
+    from stack import adapter
+    assert "note" not in inspect.getsource(adapter.facts) and "note\"" not in inspect.getsource(endware)

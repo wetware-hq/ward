@@ -23,18 +23,11 @@ MUTANTS = [
     ("stack/adapter.py", '            continue\n        if f["status"] in', '            pass\n        if f["status"] in'),
     ("stack/adapter.py", '"sensitive": i in sens', '"sensitive": False'),
     # figures data check and non-synthetic export
-    ("stack/endware.py", '    good = [r for r in all_rows if not data_check(r)]', '    good = all_rows'),
-    ("stack/endware.py", '    good = [r for r in all_rows if not data_check(r)]', '    good = [] if bad else all_rows'),
-    ("stack/endware.py", '    if not good:                              # nothing left', '    if False:                              # nothing left'),
-    ("stack/endware.py", 'ln = locales.line("FG-ROW-OMITTED"', 'ln = locales.line("FG-REFUSE-DATA"'),
-    ("stack/endware.py", '    if lines and os.path.exists(lp):', '    if False:'),
     ("stack/scorer.py", 'if not (n == 1 if "exactly once" in expect else n >= 1):', 'if not (n >= 1):'),
     ("stack/scorer.py", '        if pts != truth["expected_plotted_points"]:', '        if False:'),
     ("stack/scorer.py", '        if want is None or _fill_match(want, cap_and_text):', '        if want is None:'),
     ("stack/scorer.py", '    missing = [r["seq"] for r in snaps if not any(', '    missing = [r["seq"] for r in snaps[:1] if not any('),
     ("stack/scorer.py", '        if sl.get("line_id") == "CQ-WAITING-PARENT" and sl.get("text"):', '        if False:'),
-    ("stack/endware.py", '        return "unit"', '        return None'),
-    ("stack/endware.py", '        return "date"\n    try:', '        return None\n    try:'),
     ("stack/harness.py", 'r = {"accepted": reason is None,', 'r = {"accepted": True,'),
     ("stack/harness.py", '        self._adv = False                    # this method logs', '        pass                    # this method logs'),
 ]

@@ -47,11 +47,12 @@ class Handle:
         self._h, self.actor, self.role, self.patient = h, actor, role, patient
         self.discipline, self.scope = discipline, tuple(scope)
 
-    def observe(self, episode_id, *a):
-        return self._h._call(self, episode_id, "observe", list(a))
+    def observe(self, episode_id, *a, note=None):
+        return self._h._call(self, episode_id, "observe", list(a), note=note)
 
-    def step(self, episode_id, action):
-        return self._h._call(self, episode_id, "step", [action])
+    def step(self, episode_id, action, note=None):
+        """note: {"claim": CL-id, "reason": text} or a reason string; claim omitted -> the scripted actor's own."""
+        return self._h._call(self, episode_id, "step", [action], note=note)
 
     def call(self, episode_id, method, *a):
         """Any other method name (reset, replay, check, export ...) is attempted and refused."""
@@ -59,6 +60,7 @@ class Handle:
 
 
 class Harness:
+    NOTE_HOOK = None      # tests only: callable(record) -> reason text for a scripted actor's note, or None
     def __init__(self, scenario_id, seed, start="1937-03-01T08:00", pack="au", language="en"):
         self.scenario_id, self.seed, self.pack, self.language = scenario_id, seed, pack, language
         self.rng = random.Random(seed)
@@ -70,6 +72,9 @@ class Harness:
 
     # ---- trace ----
     def _emit(self, kind, **f):
+        from . import notes
+        if "note" not in f and (kind == "endware" or (kind == "harness" and f.get("op") in COUNTED_OPS)):
+            f["note"] = notes.scripted_note(dict(kind=kind, **f))      # the harness actor's own note
         rec = _jsonable(dict(seq=len(self.trace), kind=kind, **f))
         self.trace.append(rec)
         return rec
@@ -229,10 +234,11 @@ class Harness:
         return {"tool": "block", "block": block_id, "all": f.get("all") or [block_id], "exit": 0, "refs": [], "path": None}
 
     # ---- actor calls ----
-    def _call(self, h, episode_id, method, args):
+    def _call(self, h, episode_id, method, args, note=None):
         ep = self.episodes.get(episode_id)
         rec = dict(actor=h.actor, role=h.role, discipline=h.discipline, patient=h.patient, episode=episode_id,
                    method=method, args=args)
+        rec["_note"] = note
         if ep is None or ep.patient != h.patient:
             # harness binding: a handle reaches only its own patient's episodes, same line either way
             return self._out(h, rec, {"accepted": False, "reason": self._line("RF-NOT-YOURS"), "by": "harness"})
@@ -256,6 +262,7 @@ class Harness:
                 args = [dict(args[0], interpreter=True)]     # middleware field, where it exists (round 8)
         env = self._replayed(ep, h.actor, h.role, h.discipline, h.scope)
         before = len(env.log)
+        q0 = len(self.peek(episode_id).get("clinician_queue", []) or []) if method == "step" else 0
         if method == "step" and isinstance(args[0], dict):
             a = dict(args[0])
             a.setdefault(ts_key(ep.kind), self.tick())
@@ -279,6 +286,9 @@ class Harness:
         if method == "step" and r.get("accepted"):
             ep.log.extend(new)
             rec["events"] = [len(ep.log) - len(new) + i for i in range(len(new))]
+            q1 = len(self.peek(episode_id).get("clinician_queue", []) or [])
+            if q1 > q0 or self._would_escalate(ep, env, new):
+                rec["escalated"] = True
             out = self._out(h, rec, r)
             self._escalate_sensitive(ep, env, new, rec["events"])
             if any(e["type"] == "submit" for e in new):      # queue snapshot after every submit
@@ -287,6 +297,30 @@ class Harness:
                            queue=list(c.get("clinician_queue", [])), answers=c.get("answers", {}))
             return out
         return self._out(h, rec, r)
+
+    def _would_escalate(self, ep, env, new):
+        if ep.kind != "forms" or not isinstance(ep.case, str):
+            return False
+        from .adapter import sensitive_ids
+        sens = sensitive_ids(ep.case)
+        return any(e["type"] == "answer" and (q := env.q.get(e.get("question_id"))) and q["id"] in sens
+                   and q["safety_critical"] and e["value"] == q["alert_answer"] for e in new)
+
+    def sensitive_refs(self, episode_id):
+        """Sensitive question ids of an episode and event ids of their answers. The environment decides, not the agent:
+        a forms question with sensitive=true, or (gap) the stack sidecar."""
+        ep = self.episodes.get(episode_id)
+        if not ep or ep.kind != "forms" or not isinstance(ep.case, str):
+            return set()
+        from .adapter import sensitive_ids
+        sens = set(sensitive_ids(ep.case))
+        try:
+            env = self._replayed(ep, "SYNTH-harness", "clinician", None, ())
+            sens |= {k for k, q in env.q.items() if q.get("sensitive")}
+        except Exception:
+            pass
+        evs = {f"{episode_id}#{n}" for n, e in enumerate(ep.log) if e.get("question_id") in sens}
+        return sens | evs
 
     def _escalate_sensitive(self, ep, env, new, idx):
         """A sensitive safety question answered with its alert answer goes to the clinician queue the same day
@@ -312,6 +346,18 @@ class Harness:
             self.leaks.append(dict(actor=h.actor, ids=foreign))
         if self._adv:
             rec["adversarial"], self._adv = True, False
+        from . import notes
+        note = rec.pop("_note", None)
+        if isinstance(note, str) or note is None:
+            note = {"reason": note or ""}
+        if Harness.NOTE_HOOK and not note.get("reason"):
+            note["reason"] = Harness.NOTE_HOOK(dict(rec, accepted=accepted, response=r)) or ""
+        full = dict(rec, kind=COUNTED, accepted=accepted, response=r)
+        refs = self.sensitive_refs(rec["episode"]) if rec.get("episode") in self.episodes else set()
+        blob = json.dumps(_jsonable([rec.get("args"), r, rec.get("events")]))
+        ev = {f"{rec['episode']}#{n}" for n in rec.get("events") or []}
+        rec["sensitive_step"] = bool(ev & refs or any(f'"{x}"' in blob or (("#" in x) and x in blob) for x in refs))
+        rec["note"] = {"claim": note.get("claim") or notes.scripted_note(full)["claim"], "reason": note.get("reason", "")}
         self._emit(COUNTED, **rec, accepted=accepted, response=r)
         return r
 

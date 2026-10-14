@@ -104,41 +104,21 @@ def letter_tags(letter):
 
 
 _FIG = r'''
-import json, sys
+import json, sys, os
 sys.path.insert(0, sys.argv[1])
-from env import Env
+import figures
 a = json.load(sys.stdin)
-e = Env()
-c = e.clean(text=a["text"], as_at=a["as_at"])
-out = {"clean": c}
-if c.get("ok"):
-    out["rejects"] = e.rejects(c["handle"])
-    out["render"] = e.render(c["handle"], out=a["out"])
-print(json.dumps(out, default=str))
+try:
+    d, checks = figures.build(a["text"], a["out"] + ".html", as_at=a["as_at"])
+    files = sorted(os.path.join(d, f) for f in os.listdir(d))
+    pts = sum(len(r) for _, runs, _ in checks for r in runs)
+    print(json.dumps({"render": {"ok": True, "files": files}, "points": pts}))
+except figures.RowsRefused as e:
+    print(json.dumps({"refused": e.lines}))
 '''
 
 
 FIGURES_RUN = subprocess.run          # tests may replace this with a stub; traces use the real figures
-ISO_T = __import__("re").compile(r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(:\d{2})?$")
-
-
-def data_check(row):
-    """Why a design-CSV row fails the data check (ambiguous or unreadable date, missing unit, unreadable value),
-    or None. Done stack-side, before figures sees the row (figures' own rejects stay as a second check)."""
-    import datetime as _dt
-    if not ISO_T.match(row.get("recorded_at", "") or ""):
-        return "date"
-    try:
-        _dt.datetime.fromisoformat(row["recorded_at"])
-    except ValueError:
-        return "date"
-    if not (row.get("unit") or "").strip():
-        return "unit"
-    try:
-        float(row.get("value", ""))
-    except ValueError:
-        return "value"
-    return None
 
 
 def run_figure(h, patient, episode_id, record_ids, as_at, outdir):
@@ -156,46 +136,27 @@ def run_figure(h, patient, episode_id, record_ids, as_at, outdir):
         h._emit("adapter", refused=str(e))
         return {"tool": "refused", "reason": str(e), "exit": 2, "refs": [], "path": None}
     design = adapter.figures_csv([f for f in fs if f.get("record") in record_ids], h.pack)
-    all_rows = list(_csv.DictReader(_io.StringIO(design)))
-    bad = [r for r in all_rows if data_check(r)]
-    good = [r for r in all_rows if not data_check(r)]
-    if not good:                              # nothing left to chart: no figure at all -> FG-REFUSE-DATA
-        lines = []
-        for r in bad:
-            ln = locales.line("FG-REFUSE-DATA", event_id=r["event_id"])
-            lines.append(ln)
-            h._emit("harness", op="figure_refused", event=r["event_id"], why=data_check(r), line=ln)
-        return {"tool": "refused", "reason": "FG-REFUSE-DATA", "lines": lines, "exit": 2, "refs": [], "path": None,
-                "refused_rows": [r["event_id"] for r in bad]}
-    lines = []                                # per-row omission: no point for the row, FG-ROW-OMITTED in the caption
-    for r in bad:
-        ln = locales.line("FG-ROW-OMITTED", event_id=r["event_id"])
-        lines.append(ln)
-        h._emit("harness", op="figure_row_omitted", event=r["event_id"], why=data_check(r), line=ln)
-    rows = ["patient,local_label,t,value,unit,device,derivation,status,gap_reason"]
+    rows = ["patient,local_label,t,value,unit,device,derivation,status,gap_reason,event_id"]
     used = []
-    for r in good:
-        rows.append(f"{patient},{r['item_id']},{r['recorded_at']},{r['value']},{r['unit']},lab:core,assay,measured,")
+    fig_pid = "SYNTH-" + (re.sub(r"\D", "", patient) or "0")   # gap: figures only accepts SYNTH-<digits> patient ids
+    for r in _csv.DictReader(_io.StringIO(design)):   # every row passes straight through; figures does the row check
+        rows.append(f"{fig_pid},{r['item_id']},{r['recorded_at']},{r['value']},{r['unit']},lab:core,assay,measured,,{r['event_id']}")
         used.append(_ref(h, r["event_id"]))
     text = "\n".join(rows) + "\n"
     os.makedirs(outdir, exist_ok=True)
     payload = json.dumps({"text": text, "as_at": as_at, "out": os.path.join(outdir, "gallery")})
     r = FIGURES_RUN([FIGURES_PY, "-c", _FIG, FIGURES_DIR], input=payload, capture_output=True, text=True, cwd=outdir)
-    h._emit("endware", tool="figures", op="clean+render", exit=r.returncode)
+    h._emit("endware", tool="figures", op="build", exit=r.returncode)
     res = json.loads(r.stdout) if r.returncode == 0 and r.stdout.strip() else {"error": r.stderr[-400:]}
-    rej = (res.get("rejects") or {}).get("rejects") or []
-    for x in rej:                             # figures rejected a row: map its paste row back to the event id
-        n = int(x.get("line", 0)) - 2
-        if 0 <= n < len(used):
-            ev = f"{used[n]['episode']}#{used[n]['event']}"
-            h._emit("harness", op="figure_refused", event=ev, why=x.get("reason"),
-                    line=locales.line("FG-REFUSE-DATA", event_id=ev))
+    if "refused" in res:                       # figures made no figure: its own FG-REFUSE-DATA lines
+        return {"tool": "refused", "reason": "FG-REFUSE-DATA", "lines": res["refused"], "exit": 2, "refs": [], "path": None}
     files = res.get("render", {}).get("files", []) if isinstance(res.get("render"), dict) else []
     lp = os.path.join(outdir, "gallery", "legends.md")
-    if lines and os.path.exists(lp):          # delivered caption carries one FG-ROW-OMITTED line per omitted row
-        with open(lp, "a") as fh:
-            fh.write("\n" + "\n".join(lines) + "\n")
     legends = open(lp).read() if os.path.exists(lp) else ""
+    pre, post = locales.line("FG-ROW-OMITTED", event_id="\x00").split("\x00")
+    lines = [l for l in legends.splitlines() if l.startswith(pre) and l.endswith(post)]
+    omitted = [l[len(pre):len(l) - len(post)] for l in lines]
     return {"tool": "figures", "exit": r.returncode, "result": res, "files": files, "legends": legends,
             "paste_rows": len(text.splitlines()) - 1, "refs": used, "path": lp, "lines": lines,
-            "refused_rows": [r["event_id"] for r in bad], "charted_rows": [r["event_id"] for r in good]}
+            "refused_rows": omitted, "points": res.get("points", 0),
+            "charted_rows": [f"{u['episode']}#{u['event']}" for u in used if f"{u['episode']}#{u['event']}" not in omitted]}
