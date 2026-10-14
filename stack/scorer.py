@@ -13,13 +13,11 @@ PENDING = "PENDING TRUTH"
 FOOTER = "Draft: check against the record before sending."
 CRITERIA = ("idiot_index", "zero_bad_accepted", "outputs", "safety", "safety_lines", "must_refuse",
             "adversarial_refuse", "scenario_tests", "cites_logged", "replay", "no_leaks", "consent", "patient_wording",
-            "patient_request", "locale")
+            "alert_routing", "locale")
 BLOCKED_OUTCOMES = ("BLOCKED", "BLOCKED_FOR_OUTPUT")
 HELD = {}                 # scenario -> reason, for traces held until Physician posts min calls (none now)
-# Patient's request (room): these traces must show PV-SAMEDAY word for word in the patient view, from the signed
-# wording file. Not yet in the truth files, so it is a stack-side check (reported to Physician).
-PATIENT_REQUEST = {"S06b-sdm-on-behalf-au": ["PV-SAMEDAY"], "S08-three-fails-escalation": ["PV-SAMEDAY"],
-                   "S11-patient-revokes-agent-midway": ["PV-SAMEDAY"]}
+# Round 9: each safety-critical question has alert_route same_day (default) or before_procedure.
+ROUTE_LINES = {"same_day": ("CQ-SAMEDAY-ALERT", "PV-SAMEDAY"), "before_procedure": ("CQ-BEFORE-PROC", "PV-BEFORE-PROC")}
 
 
 QUOTE = re.compile(r'"([^"]+)"')
@@ -265,10 +263,47 @@ def scenario_tests(h, truth, art=None):
     return not bad, {"results": res}
 
 
-def patient_request(h, sid):
-    surf = "\n".join(json.dumps(r["result"], ensure_ascii=False) for r in h.trace if r.get("op") == "patient_view")
-    missing = [l for l in PATIENT_REQUEST.get(sid, []) if not (_line_text(l) and _line_text(l) in surf)]
-    return not missing, {"missing": missing}
+def alert_routes(truth):
+    """item -> route, from alert_routes = {id = route}, alert_route on [[form_questions]], else unset."""
+    out = {q["id"]: q["alert_route"] for q in truth.get("form_questions", []) if q.get("alert_route")}
+    out.update(truth.get("alert_routes", {}))
+    return out
+
+
+def route_for(truth, item):
+    return alert_routes(truth).get(item, "same_day")
+
+
+def _triggered(h, item):
+    """A yes, a decline or an unknown on a safety-critical question (the signed trigger rule)."""
+    hit = _find_item(h, item)
+    if hit is None or hit[1].kind != "forms" or not hit[2].q[item]["safety_critical"]:
+        return False
+    a = h.peek(hit[0])["answers"].get(item)
+    return a is True or a in ("declined", "unanswered", "unknown")
+
+
+def alert_routing(h, truth):
+    """For every routed item that was triggered: the route's queue line in the clinician queue and its patient
+    line in the patient view, word for word from the signed table."""
+    bad = []
+    queue_surf = "\n".join(q for eid in h.episodes for q in _queue_text(h, eid))
+    pv = "\n".join(json.dumps(r["result"], ensure_ascii=False) for r in h.trace if r.get("op") == "patient_view")
+    for item, route in sorted(alert_routes(truth).items()):
+        if route not in ROUTE_LINES:
+            bad.append({"item": item, "why": f"unknown route {route}"}); continue
+        if not _triggered(h, item):
+            continue
+        cq, pvl = ROUTE_LINES[route]
+        cq_t, pv_t = _line_text(cq), _line_text(pvl)
+        if not cq_t or not _fill_match(cq_t.replace("[item_id]", item), queue_surf):
+            bad.append({"item": item, "missing": cq})
+        if not pv_t or pv_t not in pv:
+            bad.append({"item": item, "missing": pvl})
+        other = ROUTE_LINES["before_procedure" if route == "same_day" else "same_day"]
+        if _line_text(other[1]) and _line_text(other[1]) in pv:
+            bad.append({"item": item, "wrong_route_line": other[1]})
+    return not bad, {"failed": bad}
 
 
 def must_refuse(h, truth):
@@ -427,7 +462,7 @@ def score(h, art, truth, adversarial, rerun):
     out["no_leaks"] = no_leaks(h)
     out["consent"] = consent(h, art)
     out["patient_wording"] = patient_wording(h, art, truth)
-    out["patient_request"] = patient_request(h, truth.get("scenario_id", ""))
+    out["alert_routing"] = alert_routing(h, truth)
     out["locale"] = locale(art)
     return out
 

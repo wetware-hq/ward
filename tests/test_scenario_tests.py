@@ -65,9 +65,11 @@ def test_t2_broken(decl, broken):
 
 
 # ---- T3: sensitive answer cut from the clinician letter, alert with event id present
-def t3_art(ev=f"{EP}#5", leak=None):
+def t3_art(ev=f"{EP}#5", leak=None, value=True):
     alert = adapter.lt("LT-SENSITIVE-ALERT-CLIN", **{"event id": adapter.letter_event_id(ev)})
-    return {"clinician_letter": {"notes": f"Problems:\n- {alert}\n" + (leak or ""),
+    phrase = st.S05_PHRASES[0] if value else st.S05_PHRASES[1]
+    return {"letter": f"- {phrase} [L7]\n", "facts": [{"item_id": "mh_q2", "event_id": ev, "value": value}],
+            "clinician_letter": {"notes": f"Problems:\n- {alert}\n" + (leak or ""),
                                  "letter": f"- {alert} [L6]\n", "facts": [{"item_id": "mh_q2", "event_id": ev}]}}
 
 
@@ -75,7 +77,8 @@ def test_t3_correct(decl):
     assert st.check_t3(t3_art(), decl["S05-T3-sensitive-cut"], st.S05_Q2, st.S05_PHRASES) == []
 
 
-@pytest.mark.parametrize("broken", ["answer_in_notes", "question_in_notes", "answer_in_letter", "no_alert"])
+@pytest.mark.parametrize("broken", ["answer_in_notes", "question_in_notes", "answer_in_letter", "no_alert",
+                                    "patient_overcut", "patient_alert_instead", "patient_no_fact"])
 def test_t3_broken(decl, broken):
     a = t3_art(leak="- thoughts of harming yourself\n" if broken == "answer_in_notes" else
                f"- {st.S05_Q2}\n" if broken == "question_in_notes" else None)
@@ -83,21 +86,34 @@ def test_t3_broken(decl, broken):
         a["clinician_letter"]["letter"] += "- no thoughts of harming yourself [L7]\n"
     if broken == "no_alert":
         a["clinician_letter"]["letter"] = "- nothing [L6]\n"
+    if broken == "patient_overcut":
+        a["letter"] = "- feeling low [L6]\n"
+    if broken == "patient_alert_instead":
+        a["letter"] = a["clinician_letter"]["letter"]
+    if broken == "patient_no_fact":
+        a["facts"] = []
     assert st.check_t3(a, decl["S05-T3-sensitive-cut"], st.S05_Q2, st.S05_PHRASES)
 
 
 # ---- T4: a decline queues, stays open, never a no
 def test_t4_correct(decl):
     d = decl["S05-T4-decline"]
-    assert st.check_t4(obs([q(d["expect_queue_line"])], answers={"mh_q2": "declined"}), d) == []
+    assert st.check_t4(obs([q(d["expect_queue_line"])], answers={"mh_q2": "declined"},
+                           surface=st._signed("PV-SAMEDAY")), d) == []
 
 
-@pytest.mark.parametrize("broken", ["no_queue", "closed", "as_no"])
+@pytest.mark.parametrize("broken", ["no_queue", "closed", "as_no", "no_pv", "pv_reworded", "pv_wrong_route"])
 def test_t4_broken(decl, broken):
     d = decl["S05-T4-decline"]
+    pv = {"no_pv": "", "pv_reworded": st._signed("PV-SAMEDAY").lower(),
+          "pv_wrong_route": st._signed("PV-BEFORE-PROC")}.get(broken, st._signed("PV-SAMEDAY"))
     o = obs([q(d["expect_queue_line"])] if broken != "no_queue" else [], open_=broken != "closed",
-            answers={"mh_q2": False if broken == "as_no" else "declined"})
+            answers={"mh_q2": False if broken == "as_no" else "declined"}, surface=pv)
     assert st.check_t4(o, d)
+
+
+def test_t1_t2_reviewed_t3_t4_pending():
+    assert st.REVIEWED == {"S05-T1-unconfirmed", "S05-T2-changed"}
 
 
 # ---- scoring: passing checks stay pending_review until Physician has checked them

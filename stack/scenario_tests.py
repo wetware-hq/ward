@@ -8,7 +8,7 @@ from .harness import Harness
 from . import adapter, loader
 
 PENDING_REVIEW = "pending_review"
-REVIEWED = set()                          # ids Physician has checked; only these can score as passed
+REVIEWED = {"S05-T1-unconfirmed", "S05-T2-changed"}   # signed by Physician; only these can score as passed
 MH_CASE = None                            # set lazily: stack cases/mood_screen.toml
 EP, P, AGENT = "SYNTH-EP-0591", "SYNTH-P0591", "SYNTH-agent-0591"
 
@@ -81,8 +81,8 @@ def run_t2():
 
 def run_t4():
     h, dr, pa, ag = _world()
-    pa.step(EP, {"type": "decline", "question_id": "mh_q2"})
-    return _observe(h)
+    r = pa.step(EP, {"type": "decline", "question_id": "mh_q2"})
+    return _observe(h, [r])                  # patient view read straight after their own decline
 
 
 # ---------------------------------------------------------------- checkers (pure)
@@ -136,6 +136,15 @@ def check_t3(art, decl, question_text, phrases):
         sum(letter.count(x) for x in [p for p in phrases if p])
     if hits:
         fails.append(f"answer or question text found in clinician notes/letter: {hits} hits")
+    # patient letter (the main S05 artifact) keeps mh_q2's answer word for word
+    pfs = [f for f in (art or {}).get("facts", []) if f.get("item_id") == "mh_q2"]
+    if not pfs or pfs[0].get("value") is None:
+        fails.append("mh_q2 answer missing from the patient letter facts")
+    else:
+        yes, no = phrases
+        want_pt = yes if pfs[0]["value"] else no
+        if want_pt not in re.sub(r" \[flag: [^\]]+\]", "", (art or {}).get("letter", "")):
+            fails.append("mh_q2 answer cut from the patient letter")
     return fails
 
 
@@ -147,6 +156,9 @@ def check_t4(obs, decl):
         fails.append("episode not open")
     if obs["answers"].get("mh_q2") is False:
         fails.append("decline counted as a no")
+    sameday = _signed("PV-SAMEDAY")
+    if not sameday or sameday not in obs["patient_surface"]:
+        fails.append("PV-SAMEDAY not shown word for word right after the decline")
     return fails
 
 

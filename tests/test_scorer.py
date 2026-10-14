@@ -475,12 +475,54 @@ def test_declared_scenario_tests_without_implementation_fail():
     assert scorer.scenario_tests(h, {})[0]
 
 
-def test_patient_request_pv_sameday():
-    h, *_ = world()
-    assert not scorer.patient_request(h, "S08-three-fails-escalation")[0]
-    h._emit("harness", op="patient_view", episode=EP, result={"fake_a": scorer._line_text("PV-SAMEDAY")})
-    assert scorer.patient_request(h, "S08-three-fails-escalation")[0]
-    assert scorer.patient_request(h, "S01-preproc-checklist")[0]
+# ---- round 9 alert routing
+def routed_world(answer):
+    h, dr, pa, ag = world()
+    if answer == "decline":
+        pa.step(EP, {"type": "decline", "question_id": "fake_a"})
+    else:
+        pa.step(EP, {"type": "answer", "question_id": "fake_a", "value": answer})
+    return h
+
+
+def plant(h, route, cq=True, pv=True, item="fake_a"):
+    cq_id, pv_id = scorer.ROUTE_LINES[route]
+    if cq:
+        h._emit("harness", op="clinician_queue", episode=EP,
+                text=scorer._line_text(cq_id).replace("[item_id]", item).replace("[event_id]", EP + "#2").replace("[status]", "confirmed"))
+    if pv:
+        h._emit("harness", op="patient_view", episode=EP, result={item: scorer._line_text(pv_id)})
+
+
+def test_route_default_and_sources():
+    t = {"alert_routes": {"a": "before_procedure"}, "form_questions": [{"id": "b", "alert_route": "same_day"}]}
+    assert scorer.route_for(t, "a") == "before_procedure" and scorer.route_for(t, "b") == "same_day"
+    assert scorer.route_for({}, "c") == "same_day"
+
+
+@pytest.mark.parametrize("route", ["same_day", "before_procedure"])
+def test_alert_routing_correct(route):
+    h = routed_world(True)
+    real = h.peek
+    h.peek = lambda eid: dict(real(eid), clinician_queue=[])
+    plant(h, route)
+    assert scorer.alert_routing(h, {"alert_routes": {"fake_a": route}})[0]
+
+
+@pytest.mark.parametrize("route", ["same_day", "before_procedure"])
+@pytest.mark.parametrize("broken", ["no_queue", "no_pv", "wrong_route"])
+def test_alert_routing_broken(route, broken):
+    h = routed_world("decline")
+    real = h.peek                                    # ignore any queue lines the live forms writes itself
+    h.peek = lambda eid: dict(real(eid), clinician_queue=[])
+    other = "before_procedure" if route == "same_day" else "same_day"
+    plant(h, other if broken == "wrong_route" else route, cq=broken != "no_queue", pv=broken != "no_pv")
+    assert not scorer.alert_routing(h, {"alert_routes": {"fake_a": route}})[0]
+
+
+def test_alert_routing_untriggered_needs_nothing():
+    h = routed_world(False)                          # a "no" on fake_a (alert answer is yes): no route lines
+    assert scorer.alert_routing(h, {"alert_routes": {"fake_a": "before_procedure"}})[0]
 
 
 def test_refused_export_counts_as_a_call():

@@ -102,6 +102,9 @@ def _s03(h, out, P, EO):
     ph = h.session("SYNTH-ph-03", "clinician", P, discipline="pharmacy")
     if h.blocked(EO):                         # blocked for output: the clinician still records, output refused
         ph.step(EO, A("approve"))
+        pag = h.session("SYNTH-pagent-03", "patient_agent", P)
+        probe(h, lambda: pag.step(EO, tick("get_home_list", "SYNTH-RX-0001")))    # refused: blocked episode
+        ph.step(EO, tick("get_home_list", "SYNTH-RX-0001"))
         ph.step(EO, tick("reconcile", "SYNTH-RX-0002"))
         ph.step(EO, tick("counsel_patient", "SYNTH-RX-0003"))
         return letter(h, out, P, [EO], "GP", "update to GP")
