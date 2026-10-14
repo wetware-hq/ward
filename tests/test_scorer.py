@@ -530,3 +530,51 @@ def test_refused_export_counts_as_a_call():
     n = len(h.counted())
     h.export_bundle(EP)
     assert len(h.counted()) == n + 1
+
+
+# ---- figures data check (FG-REFUSE-DATA) and non-synthetic export (RF-EXPORT-REAL)
+from stack import endware
+
+
+def test_data_check_rows():
+    ok = {"recorded_at": "1930-01-01T08:00:00", "unit": "mg/L", "value": "5"}
+    assert endware.data_check(ok) is None
+    assert endware.data_check(dict(ok, recorded_at="03/04/1930")) == "date"
+    assert endware.data_check(dict(ok, recorded_at="1930-02-30T08:00:00")) == "date"
+    assert endware.data_check(dict(ok, unit="")) == "unit"
+    assert endware.data_check(dict(ok, value="haemolysed")) == "value"
+
+
+def results_world(t2):
+    h = Harness("FAKE", 1, "1930-01-01T08:00")
+    h.open_episode("orders", os.path.join(FX, "fake_results.toml"), EP, P)
+    dr = h.session("SYNTH-fake-dr", "clinician", P, discipline="medicine")
+    dr.step(EP, {"type": "approve"})
+    h.record_result("SYNTH-fake-lab", "SYNTH-FAKE-RES-1", P, "CRP", "1930-01-01T08:00:00", 5, "mg/L")
+    h.record_result("SYNTH-fake-lab", "SYNTH-FAKE-RES-2", P, "CRP", t2, 7, "mg/L")
+    dr.step(EP, {"type": "tick", "id": "file_1", "evidence": "SYNTH-FAKE-RES-1"})
+    dr.step(EP, {"type": "tick", "id": "file_2", "evidence": "SYNTH-FAKE-RES-2"})
+    return h
+
+
+def test_bad_row_refused_with_signed_line_and_event_id(tmp_path):
+    h = results_world("03/04/1930")
+    art = endware.run_figure(h, P, EP, ["SYNTH-FAKE-RES-1", "SYNTH-FAKE-RES-2"], "1930-01-02T00:00:00", str(tmp_path))
+    assert art["tool"] == "refused" and len(art["lines"]) == 1
+    ev = [n for n, e in enumerate(h.episodes[EP].log) if e.get("evidence") == "SYNTH-FAKE-RES-2"][0]
+    want = locales.line("FG-REFUSE-DATA", event_id=f"{EP}#{ev}")
+    assert art["lines"][0] == want and want.startswith("Figure not made: the data failed a check (event ")
+    assert not any(r["kind"] == "endware" for r in h.trace)              # figures never called
+    t = {"safety_lines": [{"line_id": "FG-REFUSE-DATA", "text": "Figure not made: the data failed a check (event [event_id])."}]}
+    assert scorer.safety_lines(h, art, t)[0]
+
+
+@pytest.mark.parametrize("kind,case", [("forms", FORM), ("orders", LIST)])
+def test_nonsynthetic_export_refused(kind, case):
+    h, *_ = world()
+    n = len(h.counted())
+    r = h.try_export_nonsynthetic(kind, case, P)
+    assert not r["accepted"] and r["reason"] == scorer._line_text("RF-EXPORT-REAL")
+    assert len(h.counted()) == n and not h._adv
+    assert scorer.adversarial_refuse(h, {"adversarial_refuse": [{"action": "x", "line_id": "RF-EXPORT-REAL"}]})[0]
+    assert all(not e.startswith("SCRATCH") for e in h.episodes)

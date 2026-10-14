@@ -22,6 +22,12 @@ MUTANTS = [
     ("stack/adapter.py", '        if f["sensitive"] and audience != "patient":', '        if f["sensitive"] and f["status"] == "answered" and audience != "patient":'),
     ("stack/adapter.py", '            continue\n        if f["status"] in', '            pass\n        if f["status"] in'),
     ("stack/adapter.py", '"sensitive": i in sens', '"sensitive": False'),
+    # figures data check and non-synthetic export
+    ("stack/endware.py", '    if bad:                                   # stack-side', '    if False:                                   # stack-side'),
+    ("stack/endware.py", '        return "unit"', '        return None'),
+    ("stack/endware.py", '        return "date"\n    try:', '        return None\n    try:'),
+    ("stack/harness.py", 'r = {"accepted": reason is None,', 'r = {"accepted": True,'),
+    ("stack/harness.py", '        self._adv = False                    # this method logs', '        pass                    # this method logs'),
 ]
 
 

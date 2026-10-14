@@ -118,6 +118,28 @@ print(json.dumps(out, default=str))
 '''
 
 
+ISO_T = __import__("re").compile(r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(:\d{2})?$")
+
+
+def data_check(row):
+    """Why a design-CSV row fails the data check (ambiguous or unreadable date, missing unit, unreadable value),
+    or None. Done stack-side, before figures sees the row (figures' own rejects stay as a second check)."""
+    import datetime as _dt
+    if not ISO_T.match(row.get("recorded_at", "") or ""):
+        return "date"
+    try:
+        _dt.datetime.fromisoformat(row["recorded_at"])
+    except ValueError:
+        return "date"
+    if not (row.get("unit") or "").strip():
+        return "unit"
+    try:
+        float(row.get("value", ""))
+    except ValueError:
+        return "value"
+    return None
+
+
 def run_figure(h, patient, episode_id, record_ids, as_at, outdir):
     """One harness export -> adapter facts -> design CSV -> figures paste -> one figures build.
     figures reads its own columns (patient,local_label,t,value,unit,...), not the design CSV (gap), so the
@@ -133,6 +155,12 @@ def run_figure(h, patient, episode_id, record_ids, as_at, outdir):
         h._emit("adapter", refused=str(e))
         return {"tool": "refused", "reason": str(e), "exit": 2, "refs": [], "path": None}
     design = adapter.figures_csv([f for f in fs if f.get("record") in record_ids], h.pack)
+    bad = [r for r in _csv.DictReader(_io.StringIO(design)) if data_check(r)]
+    if bad:                                   # stack-side data check: refuse, never guess (FG-REFUSE-DATA)
+        lines = [locales.line("FG-REFUSE-DATA", event_id=r["event_id"]) for r in bad]
+        for r, ln in zip(bad, lines):
+            h._emit("harness", op="figure_refused", event=r["event_id"], why=data_check(r), line=ln)
+        return {"tool": "refused", "reason": "FG-REFUSE-DATA", "lines": lines, "exit": 2, "refs": [], "path": None}
     rows = ["patient,local_label,t,value,unit,device,derivation,status,gap_reason"]
     used = []
     for r in _csv.DictReader(_io.StringIO(design)):
@@ -144,6 +172,13 @@ def run_figure(h, patient, episode_id, record_ids, as_at, outdir):
     r = subprocess.run([FIGURES_PY, "-c", _FIG, FIGURES_DIR], input=payload, capture_output=True, text=True, cwd=outdir)
     h._emit("endware", tool="figures", op="clean+render", exit=r.returncode)
     res = json.loads(r.stdout) if r.returncode == 0 and r.stdout.strip() else {"error": r.stderr[-400:]}
+    rej = (res.get("rejects") or {}).get("rejects") or []
+    for x in rej:                             # figures rejected a row: map its paste row back to the event id
+        n = int(x.get("line", 0)) - 2
+        if 0 <= n < len(used):
+            ev = f"{used[n]['episode']}#{used[n]['event']}"
+            h._emit("harness", op="figure_refused", event=ev, why=x.get("reason"),
+                    line=locales.line("FG-REFUSE-DATA", event_id=ev))
     files = res.get("render", {}).get("files", []) if isinstance(res.get("render"), dict) else []
     lp = os.path.join(outdir, "gallery", "legends.md")
     legends = open(lp).read() if os.path.exists(lp) else ""

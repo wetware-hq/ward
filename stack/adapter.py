@@ -89,7 +89,7 @@ def facts(bundle):
                 continue
             r = bundle["records"].get(e["evidence"], {})
             out.append({"episode": ep, "item_id": e["id"], "record": e["evidence"], "field": r.get("field", ""),
-                        "text": r.get("text", ""), "value": r.get("text", ""), "unit": "", "recorded_at": e["ts"],
+                        "text": r.get("text", ""), "value": r.get("text", ""), "unit": "", "recorded_at": e.get("timestamp", e.get("ts", "")),
                         "event_id": _event_id(ep, n), "status": "answered",
                         "answered_by": f"{e['role']}, {e['discipline']}" if e["discipline"] else e["role"],
                         "on_behalf": "", "interpreter": n in interp, "sensitive": False, "safety": False, "alert": None})

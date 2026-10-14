@@ -15,6 +15,14 @@ class Blocked(Exception):
     pass
 
 
+def ts_key(kind):
+    """forms uses 'timestamp'; orders used 'ts' and moves to 'timestamp' in round 8. Read from the live code."""
+    if kind == "forms":
+        return "timestamp"
+    import inspect
+    return "ts" if '"ts"' in inspect.getsource(loader.orders().OrdersEnv.step) else "timestamp"
+
+
 def _jsonable(x):
     return json.loads(json.dumps(x, default=str, ensure_ascii=False))
 
@@ -93,6 +101,29 @@ class Harness:
                    blocks=[{"block": b, "line": locales.line(b, language=self.language, **{"locale pack": self.pack})}
                            for b in ep.blocks])
         return episode_id
+
+    def try_export_nonsynthetic(self, kind, case, patient):
+        """Harness-only wrong move: build a scratch episode whose synthetic flag is false (the data itself stays
+        synthetic) and attempt an export. It must be refused with RF-EXPORT-REAL. Logged as one planted call,
+        so it is never counted in the idiot index; the scratch episode is never added to the run."""
+        self._adv = False                    # this method logs its own planted call
+        scratch_id = "SCRATCH-NONSYNTH-" + str(len(self.trace))
+        ep = Episode(kind, case, scratch_id, patient)
+        env = ep.env("harness", "clinician", "harness")
+        reason = None
+        if hasattr(env, "open_episode") and hasattr(env, "export"):
+            env.open_episode(False, self.clock.isoformat(timespec="minutes"))
+            try:
+                env.export()
+                reason = None                                  # accepted: a failure the scorer will catch
+            except Exception as e:                             # forms refuses by its own synthetic flag
+                reason = str(e)
+        else:
+            reason = self._line("RF-EXPORT-REAL")               # orders has no synthetic flag yet: stack refuses
+        r = {"accepted": reason is None, "reason": reason or "", "by": "middleware" if hasattr(env, "export") else "harness"}
+        self._emit(COUNTED, actor="harness", role="harness", discipline=None, patient=patient, episode=scratch_id,
+                   method="export", args=[{"synthetic": False}], adversarial=True, accepted=r["accepted"], response=r)
+        return r
 
     def blocked(self, episode_id):
         return list(self.episodes[episode_id].blocks)
@@ -227,7 +258,7 @@ class Harness:
         before = len(env.log)
         if method == "step" and isinstance(args[0], dict):
             a = dict(args[0])
-            a.setdefault("timestamp" if ep.kind == "forms" else "ts", self.tick())
+            a.setdefault(ts_key(ep.kind), self.tick())
             args = [a]
             rec["args"] = args
         if hasattr(env, "call"):

@@ -43,6 +43,8 @@ def line(block_id, **f):
     f = dict(f)
     if "locale pack" in f:
         f.setdefault("locale", f["locale pack"])
+    if "event_id" in f:
+        f.setdefault("event id", f["event_id"])
     for k, v in f.items():
         t = t.replace(f"[{k}]", str(v))
     return t

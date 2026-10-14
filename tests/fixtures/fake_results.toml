@@ -1,0 +1,32 @@
+# FAKE fixture for figure data-check tests only.
+list_id = "FAKE-results"
+version = "1"
+source_lines = 2
+
+[[record]]
+id = "SYNTH-FAKE-RES-1"
+kind = "fake result"
+
+[[record]]
+id = "SYNTH-FAKE-RES-2"
+kind = "fake result"
+
+[[job]]
+id = "file_1"
+text = "File fake result one"
+depends_on = []
+owner = "SYNTH-fake-owner"
+due = "1930-01-01 10:00"
+safety_critical = false
+agent_doable = true
+source_line = 1
+
+[[job]]
+id = "file_2"
+text = "File fake result two"
+depends_on = []
+owner = "SYNTH-fake-owner"
+due = "1930-01-01 10:00"
+safety_critical = false
+agent_doable = true
+source_line = 2
