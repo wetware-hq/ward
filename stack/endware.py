@@ -118,6 +118,7 @@ print(json.dumps(out, default=str))
 '''
 
 
+FIGURES_RUN = subprocess.run          # tests may replace this with a stub; traces use the real figures
 ISO_T = __import__("re").compile(r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(:\d{2})?$")
 
 
@@ -155,21 +156,31 @@ def run_figure(h, patient, episode_id, record_ids, as_at, outdir):
         h._emit("adapter", refused=str(e))
         return {"tool": "refused", "reason": str(e), "exit": 2, "refs": [], "path": None}
     design = adapter.figures_csv([f for f in fs if f.get("record") in record_ids], h.pack)
-    bad = [r for r in _csv.DictReader(_io.StringIO(design)) if data_check(r)]
-    if bad:                                   # stack-side data check: refuse, never guess (FG-REFUSE-DATA)
-        lines = [locales.line("FG-REFUSE-DATA", event_id=r["event_id"]) for r in bad]
-        for r, ln in zip(bad, lines):
+    all_rows = list(_csv.DictReader(_io.StringIO(design)))
+    bad = [r for r in all_rows if data_check(r)]
+    good = [r for r in all_rows if not data_check(r)]
+    if not good:                              # nothing left to chart: no figure at all -> FG-REFUSE-DATA
+        lines = []
+        for r in bad:
+            ln = locales.line("FG-REFUSE-DATA", event_id=r["event_id"])
+            lines.append(ln)
             h._emit("harness", op="figure_refused", event=r["event_id"], why=data_check(r), line=ln)
-        return {"tool": "refused", "reason": "FG-REFUSE-DATA", "lines": lines, "exit": 2, "refs": [], "path": None}
+        return {"tool": "refused", "reason": "FG-REFUSE-DATA", "lines": lines, "exit": 2, "refs": [], "path": None,
+                "refused_rows": [r["event_id"] for r in bad]}
+    lines = []                                # per-row omission: no point for the row, FG-ROW-OMITTED in the caption
+    for r in bad:
+        ln = locales.line("FG-ROW-OMITTED", event_id=r["event_id"])
+        lines.append(ln)
+        h._emit("harness", op="figure_row_omitted", event=r["event_id"], why=data_check(r), line=ln)
     rows = ["patient,local_label,t,value,unit,device,derivation,status,gap_reason"]
     used = []
-    for r in _csv.DictReader(_io.StringIO(design)):
+    for r in good:
         rows.append(f"{patient},{r['item_id']},{r['recorded_at']},{r['value']},{r['unit']},lab:core,assay,measured,")
         used.append(_ref(h, r["event_id"]))
     text = "\n".join(rows) + "\n"
     os.makedirs(outdir, exist_ok=True)
     payload = json.dumps({"text": text, "as_at": as_at, "out": os.path.join(outdir, "gallery")})
-    r = subprocess.run([FIGURES_PY, "-c", _FIG, FIGURES_DIR], input=payload, capture_output=True, text=True, cwd=outdir)
+    r = FIGURES_RUN([FIGURES_PY, "-c", _FIG, FIGURES_DIR], input=payload, capture_output=True, text=True, cwd=outdir)
     h._emit("endware", tool="figures", op="clean+render", exit=r.returncode)
     res = json.loads(r.stdout) if r.returncode == 0 and r.stdout.strip() else {"error": r.stderr[-400:]}
     rej = (res.get("rejects") or {}).get("rejects") or []
@@ -181,6 +192,10 @@ def run_figure(h, patient, episode_id, record_ids, as_at, outdir):
                     line=locales.line("FG-REFUSE-DATA", event_id=ev))
     files = res.get("render", {}).get("files", []) if isinstance(res.get("render"), dict) else []
     lp = os.path.join(outdir, "gallery", "legends.md")
+    if lines and os.path.exists(lp):          # delivered caption carries one FG-ROW-OMITTED line per omitted row
+        with open(lp, "a") as fh:
+            fh.write("\n" + "\n".join(lines) + "\n")
     legends = open(lp).read() if os.path.exists(lp) else ""
     return {"tool": "figures", "exit": r.returncode, "result": res, "files": files, "legends": legends,
-            "paste_rows": len(text.splitlines()) - 1, "refs": used, "path": lp}
+            "paste_rows": len(text.splitlines()) - 1, "refs": used, "path": lp, "lines": lines,
+            "refused_rows": [r["event_id"] for r in bad], "charted_rows": [r["event_id"] for r in good]}

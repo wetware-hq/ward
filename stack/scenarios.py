@@ -272,14 +272,17 @@ def _s10(h, out, P, EO):
     series = [("SYNTH-REC-1001", 180), ("SYNTH-REC-1002", 120), ("SYNTH-REC-1003", 70)]
     for d, (rid, v) in enumerate(series, 1):
         h.record_result("SYNTH-lab-10", rid, P, "CRP", f"1937-10-0{d}T08:00:00", v, "mg/L")
+    h.record_result("SYNTH-lab-10", "SYNTH-REC-1005", P, "CRP", "1937-10-04T08:00:00", 50, "")   # unit missing
     for d, (rid, v) in enumerate(series, 1):
         ag.step(EO, tick(f"crp_day{d}", rid))
+    ag.step(EO, tick("crp_day4", "SYNTH-REC-1005"))           # the bad row takes the same path as good rows
     h.record("SYNTH-dr-10", "SYNTH-REC-1004", P, "review", "CRP reviewed")
     dr.step(EO, tick("review_trend", "SYNTH-REC-1004"))
     dr.step(EO, A("submit"))                 # orders has no submit yet: expected refused (gap)
     h.check(EO)
     probe(h, lambda: h.try_export_nonsynthetic("orders", CASE("crp_series"), P))   # RF-EXPORT-REAL (off path)
-    return run_figure(h, P, EO, ["SYNTH-REC-1001", "SYNTH-REC-1002", "SYNTH-REC-1003"], "1937-10-16T08:00:00", out)
+    return run_figure(h, P, EO, ["SYNTH-REC-1001", "SYNTH-REC-1002", "SYNTH-REC-1003", "SYNTH-REC-1005"],
+                      "1937-10-16T08:00:00", out)
 
 
 def s10(h, out):

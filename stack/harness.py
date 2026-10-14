@@ -281,6 +281,10 @@ class Harness:
             rec["events"] = [len(ep.log) - len(new) + i for i in range(len(new))]
             out = self._out(h, rec, r)
             self._escalate_sensitive(ep, env, new, rec["events"])
+            if any(e["type"] == "submit" for e in new):      # queue snapshot after every submit
+                c = self.peek(episode_id)
+                self._emit("harness", op="after_submit", episode=episode_id, final=bool(r.get("final")),
+                           queue=list(c.get("clinician_queue", [])), answers=c.get("answers", {}))
             return out
         return self._out(h, rec, r)
 

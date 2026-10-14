@@ -145,6 +145,20 @@ def outputs(h, art, truth):
             bad.append(f"overdue {len(_overdue(h))} != {truth['expected_overdue_count']}")
     elif art.get("tool") == "check":
         return False, {"check_end": "not allowed by truth"}
+    if "expected_plotted_points" in truth:
+        pts = len(art.get("charted_rows", [])) if art.get("tool") == "figures" and art.get("files") else 0
+        if pts != truth["expected_plotted_points"]:
+            bad.append(f"plotted points {pts} != {truth['expected_plotted_points']}")
+    cap_and_text = delivered_caption(art) + "\n" + _artifact_text(art)
+    for lid in truth.get("must_not_appear", []):
+        want = _line_text(lid)
+        if want is None or _fill_match(want, cap_and_text):
+            bad.append(f"{lid} must not appear")
+    for fx in truth.get("fixture_items_required", []):
+        path = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+                            fx.get("fixture", "").removeprefix("stack/"))
+        if not (os.path.exists(path) and f'"{fx.get("id")}"' in open(path).read()):
+            bad.append(f"fixture {fx.get('fixture')} lacks {fx.get('id')}")
     text = _artifact_text(art)
     views = "\n".join(json.dumps(r["result"], ensure_ascii=False) for r in h.trace if r.get("op") == "patient_view")
     for row in truth.get("expected_outputs", []):
@@ -222,10 +236,57 @@ def _fill_match(template, text):
     return re.search(pat, text) is not None
 
 
+def waiting_parent(h, item, text):
+    """CQ-WAITING-PARENT word for word in the queue after EACH failed submit while the parent question is blank."""
+    hit = _find_item(h, item)
+    if hit is None or hit[1].kind != "forms" or not hit[2].q[item].get("ask_if"):
+        return False, "item has no parent question"
+    parent = hit[2].q[item]["ask_if"]["id"]
+    snaps = [r for r in h.trace if r.get("op") == "after_submit" and r.get("episode") == hit[0] and not r["final"]
+             and r["answers"].get(parent) in ("unanswered", None)]
+    if not snaps:
+        return False, "no failed submit with the parent blank"
+    missing = [r["seq"] for r in snaps if not any(_fill_match(text, q) for q in r["queue"])]
+    return not missing, {"failed_submits": len(snaps), "missing_after": missing}
+
+
+def delivered_caption(art):
+    """The caption as delivered: the legends file on disk, not the trace."""
+    p = art.get("path") if art.get("tool") == "figures" else None
+    return open(p, encoding="utf-8").read() if p and os.path.exists(p) else ""
+
+
+def _record_event(h, record_id):
+    for eid, ep in h.episodes.items():
+        for n, e in enumerate(ep.log):
+            if e.get("type") == "tick" and e.get("evidence") == record_id:
+                return f"{eid}#{n}"
+    return None
+
+
 def safety_lines(h, art, truth):
-    surf = _surface(h) + "\n" + (_artifact_text(art))
+    surf = _surface(h) + "\n" + (_artifact_text(art)) + "\n" + delivered_caption(art)
     bad = []
     for sl in truth.get("safety_lines", []):
+        expect = str(sl.get("expect", "")).lower()
+        if "must not appear" in expect:
+            want = _line_text(sl.get("line_id", ""))
+            if not want or _fill_match(want, surf):
+                bad.append({"line_id": sl.get("line_id"), "why": "appears but must not" if want else "unsigned"})
+            continue
+        if "delivered figure caption" in expect and sl.get("text"):
+            cap = delivered_caption(art)
+            ev = _record_event(h, sl.get("item", ""))
+            want = re.sub(r"\[[^\]]*\]", ev, sl["text"]) if ev else None
+            n = cap.count(want) if want else 0
+            if not (n == 1 if "exactly once" in expect else n >= 1):
+                bad.append({"item": sl.get("item"), "line_id": sl.get("line_id"), "found_in_caption": n})
+            continue
+        if sl.get("line_id") == "CQ-WAITING-PARENT" and sl.get("text"):
+            ok, why = waiting_parent(h, sl.get("item", ""), sl["text"])
+            if not ok:
+                bad.append({"item": sl.get("item"), "line_id": "CQ-WAITING-PARENT", "why": why})
+            continue
         if sl.get("text"):
             ok = _fill_match(sl["text"], surf)
         else:

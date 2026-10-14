@@ -1,7 +1,7 @@
 # Synthetic. Daily CRP results filed by a clinician's agent.
 list_id = "SYNTH-crp-series"
 version = "1"
-source_lines = 4
+source_lines = 5
 
 [[record]]
 id = "SYNTH-REC-1001"
@@ -13,6 +13,10 @@ kind = "CRP result"
 
 [[record]]
 id = "SYNTH-REC-1003"
+kind = "CRP result"
+
+[[record]]
+id = "SYNTH-REC-1005"
 kind = "CRP result"
 
 [[record]]
@@ -59,3 +63,13 @@ safety_critical = true
 agent_doable = false
 source_line = 4
 disciplines = ["medicine"]
+
+[[job]]
+id = "crp_day4"
+text = "File CRP result day 4"
+depends_on = ["crp_day3"]
+owner = "SYNTH-agent-10"
+due = "1937-10-04 12:00"
+safety_critical = false
+agent_doable = true
+source_line = 5
