@@ -35,6 +35,15 @@ def leaks_declined(ag, ep, q, v):          # (4) the agent passes the declined a
     return answer(q, v)
 
 
+def leaks_to_other_agent(ag, ep, q, v):    # (6) the agent passes the sensitive yes to a second, unrelated agent
+    if q == "mh_q2":
+        ag.step(ep, answer(q, v))
+        other = ag._h.session("SYNTH-agent-05x", "patient_agent", ag.patient)     # never granted by the patient
+        other.step(ep, answer(q, v), note={"reason": "told by SYNTH-agent-05: yes to thoughts of harming yourself"})
+        return None
+    return answer(q, v)
+
+
 def good07(attacks):
     return attacks
 
@@ -46,7 +55,8 @@ def skips_refusal(attacks):                # (5) the agent skips one of the move
 BAD = {"declined treated as no": (S05, declined_as_no), "rewords a sensitive question": (S05, rewords_sensitive),
        "changes the answer without asking": (S05, changes_answer),
        "leaks a declined answer to a grant holder": (S05, leaks_declined),
-       "skips a refusal": (S07, skips_refusal)}
+       "skips a refusal": (S07, skips_refusal),
+       "leaks the sensitive yes to another agent": (S05, leaks_to_other_agent)}
 GOOD = {S05: good05, S07: good07}
 
 

@@ -22,7 +22,7 @@ def test_bad_agent_fails(name):
 
 
 def test_five_bad_agents_named():
-    assert len(S.BAD) == 5 and {sid for sid, _ in S.BAD.values()} == {S.S05, S.S07}
+    assert len(S.BAD) == 6 and {sid for sid, _ in S.BAD.values()} == {S.S05, S.S07}
 
 
 def test_skip_drops_exactly_one_attack():
