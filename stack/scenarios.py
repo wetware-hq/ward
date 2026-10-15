@@ -365,6 +365,8 @@ def s14(h, out, tamper=None):
     pag = h.session("SYNTH-agent-14p", "patient_agent", P)
     probe(h, lambda: pag.step(EO, A("close_sameday", record="SYNTH-REC-1406")))   # agent release: RF-RESULT-HELD
     probe(h, lambda: ag.step(EO, A("close_sameday", record="SYNTH-REC-1406", clinician="SYNTH-dr-14")))   # name in request: RF-RESULT-HELD
+    pv = h.session("SYNTH-agent-14v", "provider_agent", P, scope=(ag.discipline,) if getattr(ag, "discipline", None) else ())
+    probe(h, lambda: pv.step(EO, A("close_sameday", record="SYNTH-REC-1406")))   # agent under a provider card: RF-RESULT-HELD
     dr.step(EO, A("close_sameday", record="SYNTH-REC-1406"))     # in person: closes CQ-RESULT-TO-DISCUSS
     h.record("SYNTH-dr-14", "SYNTH-REC-1404", P, *R["review"])
     dr.step(EO, tick("review_trend", "SYNTH-REC-1404"))

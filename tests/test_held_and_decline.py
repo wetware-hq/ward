@@ -406,7 +406,7 @@ def test_s14_probes_are_refused_with_their_signed_lines(tmp_path):
     assert len(ex) == 1 and ex[0]["args"] == [{"synthetic": False}] and ex[0]["episode"].startswith("SCRATCH-NONSYNTH-")
     assert len(_adv(h, "PV-RESULT-WAITING")) == 1
     held = _adv(h, "RF-RESULT-HELD")
-    assert {r["role"] for r in held} == {"clinician_agent", "patient_agent"}
+    assert {r["role"] for r in held} == {"clinician_agent", "patient_agent", "provider_agent"}
 
 
 def test_s14_raw_value_request_after_release_is_not_refused(tmp_path):

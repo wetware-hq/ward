@@ -11,7 +11,7 @@ PERSON_GRANTS = {k: v for d in _toml.load(open(os.path.join(os.path.dirname(os.p
 SYNTH_ID = re.compile(r"SYNTH-[A-Za-z0-9-]+")
 COUNTED = "call"          # trace kind of an actor call
 COUNTED_OPS = {"open", "check", "export", "export_refused", "replay", "record_result"}   # harness ops that count (truth: "harness: reset/check/...")
-AGENT_ROLES = ("patient_agent", "clinician_agent")
+AGENT_ROLES = ("patient_agent", "clinician_agent", "provider_agent")   # the roles cards' sleeve maps to "agent"
 CLINICIAN_ROLES = ("clinician",)          # who may still act in a blocked episode
 # job ids that are a trend review (data: cases/scenario_data.toml [claims] trend_review_jobs)
 TREND_REVIEW_JOBS = frozenset(_toml.load(open(os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
