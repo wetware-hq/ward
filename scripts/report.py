@@ -20,15 +20,16 @@ def main():
         u = "pass" if r["utility"] and r["index_ok"] else "FAIL " + ",".join(k for k, (ok, _) in r["criteria"].items() if not ok)
         print(f"{sid:<66} {r['calls']:>5} {r['minimum']:>4} {r['index']:>6}  {u:<14} {r['artifact']}")
     print()
-    print("Loop 2: live agents (20 fixed seeds each)")
+    print("Loop 2: agent loop, 20 fixed seeds each (SCRIPTED: deterministic scripted agent, no model; never LIVE)")
     print(f"{'scenario':<66} {'status':<15} useful  95% CI (Clopper-Pearson)  failure upper bound")
     for sid in live.LIVE_SCENARIOS:
-        r = live.run_live(sid, None)
-        if r["status"] != "RAN":
+        truth = __import__("stack.scorer", fromlist=["x"]).load_truth(sid)
+        r = live.run_scripted(sid, live.scripted_run_one(sid, truth)) if truth else live.run_live(sid, None)
+        if r["status"] not in ("RAN", live.SCRIPTED):
             print(f"{sid:<66} {r['status']:<15} -       -                        -")
         else:
             lo, hi = r["ci95"]
-            print(f"{sid:<66} {'RAN':<15} {r['useful']}/20   [{lo:.3f}, {hi:.3f}]   {r['fail_upper']:.3f}")
+            print(f"{sid:<66} {r['status'] + ('' if r.get('replay_identical', True) else ' REPLAY-DIFF'):<15} {r['useful']}/20   [{lo:.3f}, {hi:.3f}]   {r['fail_upper']:.3f}")
 
 
 if __name__ == "__main__":

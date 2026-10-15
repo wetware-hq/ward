@@ -25,3 +25,7 @@ python3 scripts/build_s12_notes.py        # rebuild cases/S12.notes.txt from sta
 setting they read (`scripts/bar.sh SIBLINGS --env` prints them without running anything). SIBLINGS holds the clones
 and the read-only folders `stack_truth/`, `cards_truth/`, `cards_wording/` and `wording/`. With those set, letters
 deselects none of its 6 `needs_signed` tests and cards none of its 38; unset, both prepush checks fail.
+
+## Live-model status
+
+S05 and S07 were checked with a scripted stand-in, not a real AI model. The scripted runs show the checks catch the mistakes those two scenarios are for. They don't show how a real model behaves. Those tests are still to come.

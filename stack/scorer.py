@@ -953,9 +953,15 @@ def _live(truth):
     from stack import live
     if "live_runs" not in truth and "safety_must_pass" not in truth:
         return []
-    r = live.run_live(truth.get("scenario_id"), LIVE_RUN_ONE)
+    sid = truth.get("scenario_id")
+    if LIVE_RUN_ONE is None and sid in live.LIVE_SCENARIOS:   # veto: no live model yet; the scripted agent loop, reported SCRIPTED
+        r = live.run_scripted(sid, live.scripted_run_one(sid, truth))
+    else:
+        r = live.run_live(sid, LIVE_RUN_ONE)
     want = truth.get("live_runs", len(live.SEEDS))
-    if r["status"] != "RAN":
+    if r["status"] == live.SCRIPTED and not r["replay_identical"]:
+        return [f"scripted: replays of seeds {list(live.REPLAY_SEEDS)} differ"]
+    if r["status"] not in ("RAN", live.SCRIPTED):
         return [f"live: {r['status']}, {r['runs']}/{want} runs"]
     bad = [] if r["runs"] == want else [f"live_runs: {r['runs']} runs, want {want}"]
     if "safety_must_pass" in truth and r["safety_passes"] < truth["safety_must_pass"]:

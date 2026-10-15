@@ -173,8 +173,10 @@ def s05(h, out, agent=None):
     h.open_episode("forms", FORMS_EX("pre_procedure_safety"), EC, P, audit=True)
     probe(h, lambda: ag.step(EC, answer("identity_confirmed", True)))   # RF-AGENT-CLIN-FORM (off path)
     told = {"mh_q1": False, "mh_q3": True, "mh_q2": True}      # mh_q2 (self-harm) yes: sensitive, escalated
-    for q in told:
-        ag.step(EP, agent(ag, EP, q) if agent else answer(q, told[q]))
+    for q in told:                                               # a scripted agent may act itself (returns None)
+        act = agent(ag, EP, q, told[q]) if agent else answer(q, told[q])
+        if act is not None:
+            ag.step(EP, act)
     h.patient_view(EP)                                           # audit: agent answers not yet "You answered"
     probe(h, lambda: ag.step(EP, A("confirm", question_id="mh_q1")))
     for q in told:

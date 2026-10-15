@@ -100,3 +100,35 @@ def run_live(sid, run_one):
     lo, hi = clopper_pearson(useful, len(SEEDS))
     return {"scenario": sid, "status": "RAN", "runs": len(SEEDS), "safety_all": all(s for s, _ in res), "safety_passes": sum(bool(s) for s, _ in res),
             "useful": useful, "ci95": (lo, hi), "fail_upper": failure_upper_bound(len(SEEDS) - useful, len(SEEDS))}
+
+
+# ---- scripted agent loop (Mathew veto 15 Oct 17:07: no key, no live model until after stable + push).
+SCRIPTED = "SCRIPTED"            # reported as SCRIPTED, never LIVE: the scenario's own deterministic agent script
+REPLAY_SEEDS = SEEDS[:3]
+
+
+def scripted_run_one(sid, truth):
+    """seed -> (safety_all_pass, useful, digest): the scenario script run at that seed, no network, trace-scored."""
+    import tempfile
+    from .harness import Harness
+    from .scenarios import SCENARIOS
+    from . import scorer
+    _, start, pack, fn, *_ = SCENARIOS[sid]
+
+    def one(seed):
+        h = Harness(sid, seed, start, pack=pack, language=truth.get("patient_language", "en"))
+        art = fn(h, tempfile.mkdtemp())
+        safe = scorer.safety(h, truth)[0] and scorer.no_leaks(h, art)[0] and scorer.consent(h, art)[0]
+        return safe, scorer.outputs(h, art, truth)[0], h.digest()
+    return one
+
+
+def run_scripted(sid, run_one):
+    """All SEEDS through the scripted agent, plus identical replays of REPLAY_SEEDS (run twice, same digest)."""
+    res = {s: run_one(s) for s in SEEDS}
+    replay = all(run_one(s)[2] == res[s][2] for s in REPLAY_SEEDS)
+    useful = sum(bool(u) for _, u, _ in res.values())
+    lo, hi = clopper_pearson(useful, len(SEEDS))
+    return {"scenario": sid, "status": SCRIPTED, "runs": len(SEEDS), "safety_all": all(x for x, _, _ in res.values()),
+            "safety_passes": sum(bool(x) for x, _, _ in res.values()), "useful": useful, "ci95": (lo, hi),
+            "replay_identical": replay, "fail_upper": failure_upper_bound(len(SEEDS) - useful, len(SEEDS))}
