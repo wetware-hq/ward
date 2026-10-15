@@ -701,8 +701,9 @@ class Harness:
         refs = self.sensitive_refs(rec["episode"]) if rec.get("episode") in self.episodes else set()
         blob = json.dumps(_jsonable([rec.get("args"), r, rec.get("events")]))
         ev = {f"{rec['episode']}#{n}" for n in rec.get("events") or []}
+        rec["closed_sensitive"] = bool(rec.pop("_closed_sensitive", False))   # staff-side trace field only (ruling 16:08)
         rec["sensitive_step"] = bool(ev & refs or any(f'"{x}"' in blob or (("#" in x) and x in blob) for x in refs)
-                                     or bool(rec.pop("_closed_sensitive", False)))
+                                     or rec["closed_sensitive"])
         rec["note"] = {"claim": note.get("claim") or notes.scripted_note(full)["claim"], "reason": note.get("reason", "")}
         self._emit(COUNTED, **rec, accepted=accepted, response=r)
         return r

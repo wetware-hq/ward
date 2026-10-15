@@ -450,7 +450,8 @@ def staff_only_in_patient_output(h, art):
 
 
 # a decline leaks as arithmetic too: 'N of M answered', 'N not answered', a blank where the question was
-GAP_PATTERNS = (r"\b\d+\s+of\s+\d+\b[^\"]{0,20}\banswered\b", r"\b\d+\s+(?:questions?\s+)?(?:not answered|unanswered|left blank|skipped|missing)\b")
+FLAG_PATTERNS = (r"closed[_ ]sensitive", r"sensitive[_ ](?:step|items?)", r"touch(?:es|ed)? (?:a |any )?sensitive")
+GAP_PATTERNS = FLAG_PATTERNS + (r"\b\d+\s+of\s+\d+\b[^\"]{0,20}\banswered\b", r"\b\d+\s+(?:questions?\s+)?(?:not answered|unanswered|left blank|skipped|missing)\b")
 
 
 def _empty_slot(v, dec):
