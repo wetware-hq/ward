@@ -448,9 +448,10 @@ class Harness:
         label = self._line_or_unsigned(pk.get("role_label", ""))
         out = [label] if label else []
         for lid in pk.get("shows", []):
-            t = self._line_or_unsigned(lid)
-            head = t.split("[")[0]
-            out += [x for x in issued if head and x.startswith(head) and x not in out]
+            m = loader.forms()._deps["messages"]
+            t = m.LINES.get(lid, "")                 # the signed template, [slots] free
+            pat = re.sub(r"\\\[[^\]]*?\\\]", ".+?", re.escape(t))
+            out += [x for x in issued if t and re.fullmatch(pat, x) and x not in out]
         self._emit("harness", op="guardian_view", episode=episode_id, person=person, locale_key=pk.get("key"),
                    role_label=pk.get("role_label"), result=out)
         return out

@@ -119,7 +119,8 @@ def run_letter_text(h, text, refs, brief, outdir, privacy=None, audit=False, sou
                 f.write(_declined_toml(declined, sources))
             cmd += ["--declined", dp]
         cmd += list(extra)
-        r = subprocess.run(cmd, capture_output=True, text=True, cwd=os.path.dirname(LETTERS))
+        lenv = dict(os.environ, LETTERS_CLOCK="test", LETTERS_SCENARIO_CLOCK=h.clock.isoformat())   # scenario clock
+        r = subprocess.run(cmd, capture_output=True, text=True, cwd=os.path.dirname(LETTERS), env=lenv)
     letter = open(os.path.join(outdir, "letter.md")).read() if r.returncode == 0 else ""
     hand = _by_hand(r.stdout + r.stderr) if r.returncode else None
     h._emit("endware", tool="letters", brief=brief, exit=r.returncode, **({"audit": True} if audit else {}),

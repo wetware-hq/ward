@@ -26,3 +26,24 @@ def test_stack_sets_the_figures_clock_mode_and_never_overrides_figures():
     src = (ROOT / "stack" / "endware.py").read_text()
     assert 'FIGURES_CLOCK="test"' in src and "FIGURES_SCENARIO_CLOCK=" in src
     assert not re.search(r"figures\.(DRAWN|ANCHOR)", src)
+
+
+def test_letters_runs_on_the_scenario_clock_in_test_mode(monkeypatch):
+    import subprocess
+    from stack import endware
+    seen = {}
+    real = subprocess.run
+    def spy(cmd, *a, **k):
+        if endware.LETTERS in cmd:
+            seen.update(k.get("env") or {})
+        return real(cmd, *a, **k)
+    monkeypatch.setattr(subprocess, "run", spy)
+    monkeypatch.delenv("LETTERS_CLOCK", raising=False)
+    from stack.harness import Harness
+    from stack.scenarios import SCENARIOS
+    import tempfile
+    sid = "S13-paeds-guardian-au"
+    seed, start, pack, fn, *_ = SCENARIOS[sid]
+    h = Harness(sid, seed, start, pack=pack, language="en")
+    fn(h, tempfile.mkdtemp())
+    assert seen.get("LETTERS_CLOCK") == "test" and seen.get("LETTERS_SCENARIO_CLOCK", "").startswith(h.clock.date().isoformat())

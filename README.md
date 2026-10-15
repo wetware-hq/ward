@@ -29,3 +29,7 @@ deselects none of its 6 `needs_signed` tests and cards none of its 38; unset, bo
 ## Live-model status
 
 S05 and S07 were checked with a scripted stand-in, not a real AI model. The scripted runs show the checks catch the mistakes those two scenarios are for. They don't show how a real model behaves. Those tests are still to come.
+
+## Status
+
+Not for use with real patients.
