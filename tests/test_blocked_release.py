@@ -1,7 +1,7 @@
 """A BLOCKED_FOR_OUTPUT trace must release nothing: no endware build, no artifact file, block artifact only."""
 import os
 import pytest
-from stack import runner, scorer
+from ward import runner, scorer
 from truthgate import missing_truth, truth_path
 
 BLOCKED = ["S03-med-rec-pharmacist", "S04-allied-referral-physio", "S06a-sdm-on-behalf-eu-de", "S10-results-figure"]

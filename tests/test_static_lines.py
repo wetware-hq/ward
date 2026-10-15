@@ -1,10 +1,10 @@
 """Static check (ast, not a sweep): every line id the harness passes to _line() is a signed row, so the
 'ERR:' fallback in _line can never fire."""
 import ast, pathlib
-from stack import loader
+from ward import loader
 from signed_source import signed_rows as _signed_rows
 
-SRC = pathlib.Path(__file__).resolve().parent.parent / "stack" / "harness.py"
+SRC = pathlib.Path(__file__).resolve().parent.parent / "ward" / "harness.py"
 
 
 def line_ids():

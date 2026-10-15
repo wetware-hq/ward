@@ -1,4 +1,4 @@
-# Synthetic scenario data read by stack/scenarios.py: disciplines, clinical record texts, result labels and
+# Synthetic scenario data read by ward/scenarios.py: disciplines, clinical record texts, result labels and
 # letter readers. Domain names live here (data), never in .py code (generalisation guard).
 [disciplines]
 MED = "medicine"

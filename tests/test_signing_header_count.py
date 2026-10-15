@@ -1,5 +1,5 @@
 """Room ruling 11:10: the line count a signing file's header states must equal the id rows parsed from that file.
-Signing files are found as in test_no_duplicate_signed_ids (settings STACK_WORDING_DIRS / STACK_SIBLINGS_DIR). Read-only."""
+Signing files are found as in test_no_duplicate_signed_ids (settings WARD_WORDING_DIRS / WARD_SIBLINGS_DIR). Read-only."""
 import os, pathlib, re
 
 HERE = pathlib.Path(__file__).resolve().parent
@@ -9,9 +9,9 @@ STATED = re.compile(r"\b(\d+) lines\b")
 
 
 def wording_dirs():
-    if os.environ.get("STACK_WORDING_DIRS"):
-        return [pathlib.Path(p) for p in os.environ["STACK_WORDING_DIRS"].split(os.pathsep) if p]
-    return [pathlib.Path(os.environ.get("STACK_SIBLINGS_DIR") or ROOT.parent) / "wording"]
+    if os.environ.get("WARD_WORDING_DIRS"):
+        return [pathlib.Path(p) for p in os.environ["WARD_WORDING_DIRS"].split(os.pathsep) if p]
+    return [pathlib.Path(os.environ.get("WARD_SIBLINGS_DIR") or ROOT.parent) / "wording"]
 
 
 def signing_files():

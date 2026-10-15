@@ -1,6 +1,6 @@
 """The README carries the signed Live-model status line word for word (read from the signing file when present)."""
 import os, pathlib, re
-from stack import paths
+from ward import paths
 
 README = pathlib.Path(__file__).resolve().parent.parent / "README.md"
 BAR_SIGNED = pathlib.Path(paths.SIBLINGS) / "STABILITY_BAR.md"    # the signed source

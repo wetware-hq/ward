@@ -1,3 +1,3 @@
 # Specialty pack (synthetic, data only): result kinds held for discussion with the patient before any
-# patient-side view may show them. The held-result gate in stack/harness.py reads this list; no specialty code.
+# patient-side view may show them. The held-result gate in ward/harness.py reads this list; no specialty code.
 held_result_kinds = ["imaging report"]

@@ -4,7 +4,7 @@
 line_tables = []
 
 [[modules]]
-path = "stack/harness.py"
+path = "ward/harness.py"
 functions = [
     "cards_grant",
     "_person_access",
@@ -29,13 +29,13 @@ functions = [
 ]
 
 [[modules]]
-path = "stack/adapter.py"
+path = "ward/adapter.py"
 functions = [
     "facts",
 ]
 
 [[modules]]
-path = "stack/scorer.py"
+path = "ward/scorer.py"
 functions = [
     "resubmit_prompt",
     "consent",
@@ -54,13 +54,13 @@ functions = [
 ]
 
 [[modules]]
-path = "stack/locales.py"
+path = "ward/locales.py"
 functions = [
     "line",
 ]
 
 [[modules]]
-path = "stack/scenario_tests.py"
+path = "ward/scenario_tests.py"
 functions = [
     "check_t1",
     "check_t2",
@@ -68,11 +68,11 @@ functions = [
 ]
 
 [[modules]]
-path = "stack/live.py"
+path = "ward/live.py"
 functions = ["live_guard", "send_guarded", "_strings"]
 
 # A refusal must not change the calling handle, the episodes or the trace beyond its own refusal record.
 [[session]]
-path = "stack/harness.py"
+path = "ward/harness.py"
 function = "_call"
 statements = ["h.role = 'clinician'", "h.actor = 'SYNTH-other'", "self.episodes.clear()", "self.trace.append({'kind': 'x'})"]

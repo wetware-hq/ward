@@ -7,7 +7,7 @@ import os
 from .endware import letter, run_figure
 
 HERE = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-from stack.paths import SIBLINGS as WS
+from ward.paths import SIBLINGS as WS
 FORMS_EX = lambda n: os.path.join(WS, "forms", "examples", n + ".toml")
 CASE = lambda n: os.path.join(HERE, "cases", n + ".toml")
 import tomllib as _toml

@@ -1,7 +1,7 @@
 """Status wording through the adapter on two real traces (run only when both truth files exist)."""
 import re, pytest
-from stack import runner, scorer, adapter
-from stack.endware import letter
+from ward import runner, scorer, adapter
+from ward.endware import letter
 from truthgate import missing_truth, truth_path
 
 FLAG = re.compile(r" \[flag: [^\]]+\]")
@@ -18,7 +18,7 @@ def need(sid):
     if t is None:
         missing_truth(sid)
     red = KNOWN_RED.get("S05" if sid == S05 else "")
-    if red and os.environ.get("STACK_RUN_TRACES") != "1":
+    if red and os.environ.get("WARD_RUN_TRACES") != "1":
         pytest.skip(f"known red, trace {sid}: " + red)
     return t
 

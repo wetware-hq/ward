@@ -1,9 +1,9 @@
 """Scorer and harness unit tests on obviously fake fixtures. No scenario trace is run here."""
 import os, pytest
-from stack.harness import Harness
-from stack import scorer, live, locales
-from stack.endware import DECLINE_TEXT
-from stack import adapter
+from ward.harness import Harness
+from ward import scorer, live, locales
+from ward.endware import DECLINE_TEXT
+from ward import adapter
 from truthgate import missing_truth, truth_path
 
 FX = os.path.join(os.path.dirname(__file__), "fixtures")
@@ -12,7 +12,7 @@ P, Q, EP, EQ = "SYNTH-FAKEP1", "SYNTH-FAKEP2", "SYNTH-FAKE-EP1", "SYNTH-FAKE-EP2
 
 
 def grant(kind="grant", agent="SYNTH-fake-ag", patient=P):
-    from stack import loader
+    from ward import loader
     need = loader.forms().FIELDS.get(kind, set())
     return {"type": kind, **({"agent": agent, "patient": patient} if "agent" in need else {})}
 
@@ -55,7 +55,7 @@ def test_both_truth_files_load(tmp_path):
 
 
 def test_pending_in_pipeline(tmp_path):
-    from stack import pipeline
+    from ward import pipeline
     assert pipeline.evaluate("S01-preproc-checklist", truth_root=str(tmp_path))["status"] == scorer.PENDING
 
 
@@ -298,7 +298,7 @@ def test_blocked_refuses_patient_and_agent():
 
 
 def test_blocked_clinician_safety_answer_accepted_flagged_and_output_refused():
-    from stack.endware import letter, run_figure
+    from ward.endware import letter, run_figure
     h, dr, pa, ag = blocked_world()
     dr.step(EP, {"type": "approve"})
     assert dr.step(EP, {"type": "answer", "question_id": "fake_a", "value": True})["accepted"]
@@ -348,7 +348,7 @@ def test_clopper_pearson_known_values():
 
 
 def test_blocked_episode_is_never_exported():
-    from stack.harness import Blocked
+    from ward.harness import Blocked
     h, dr, pa, ag = blocked_world()
     with pytest.raises(Blocked):
         h.export(EP)
@@ -541,7 +541,7 @@ def test_refused_export_counts_as_a_call():
 
 
 # ---- figures data check (FG-REFUSE-DATA) and non-synthetic export (RF-EXPORT-REAL)
-from stack import endware
+from ward import endware
 
 
 def results_world(t2, unit1="mg/L", unit2="mg/L"):
@@ -557,7 +557,7 @@ def results_world(t2, unit1="mg/L", unit2="mg/L"):
 
 
 def spy_figures(monkeypatch, seen):
-    """Real figures run; records the paste the stack handed over (no output is edited)."""
+    """Real figures run; records the paste the ward handed over (no output is edited)."""
     import json as _json, subprocess as _sp
     def run(cmd, input=None, **kw):
         seen.append(_json.loads(input)["text"])
@@ -590,7 +590,7 @@ def test_mixed_batch_charts_good_rows_only(tmp_path, monkeypatch):
     art = endware.run_figure(h, P, EP, ["SYNTH-FAKE-RES-1", "SYNTH-FAKE-RES-2"], "1930-01-02T00:00:00", str(tmp_path))
     assert art["tool"] == "figures" and art["files"] and art["points"] == 1
     assert art["charted_rows"] == [ev_of(h, "SYNTH-FAKE-RES-1")] and art["refused_rows"] == [ev_of(h, "SYNTH-FAKE-RES-2")]
-    assert len(seen) == 1 and seen[0].count("\n") == 3                # header + both rows: the stack passes rows straight through
+    assert len(seen) == 1 and seen[0].count("\n") == 3                # header + both rows: the ward passes rows straight through
     want = locales.line("FG-ROW-OMITTED", event_id=ev_of(h, "SYNTH-FAKE-RES-2"))
     assert art["lines"] == [want] and scorer.delivered_caption(art).count(want) == 1
     assert locales.line("FG-REFUSE-DATA", event_id="x").split("(")[0] not in scorer._surface(h)
@@ -666,12 +666,12 @@ def test_nonsynthetic_probe_does_not_mark_the_next_call():
 
 
 WAIT = "Waiting on Q1: Do you have any allergies to medicines? Then ask Q2: Did a medicine allergy ever make it hard to breathe?"
-HISTORY = __import__("os").path.join(__import__("stack.paths", fromlist=["SIBLINGS"]).SIBLINGS, "forms", "examples", "patient_history.toml")
+HISTORY = __import__("os").path.join(__import__("ward.paths", fromlist=["SIBLINGS"]).SIBLINGS, "forms", "examples", "patient_history.toml")
 
 
 def waiting_world():
     """Real forms episode on the example history form; three failed submits by the agent, parent blank."""
-    from stack.scenarios import access
+    from ward.scenarios import access
     h = Harness("FAKE", 1, "1930-01-01T08:00")
     h.open_episode("forms", HISTORY, EP, P)
     dr = h.session("SYNTH-fake-dr", "clinician", P, discipline="medicine")
@@ -735,7 +735,7 @@ def test_s10b_answer_file_fields_read():
     assert t["min_calls"] == 15 and t["expected_plotted_points"] == 3 and t["must_not_appear"] == ["FG-REFUSE-DATA"]
     h, *_ = world()
     ok, d = scorer.outputs(h, {"tool": "letters", "exit": 0, "letter": ""}, {"fixture_items_required": t.get("fixture_items_required", [])})
-    assert ok, d                                         # SYNTH-REC-1005 and crp_day4 are in the stack fixture
+    assert ok, d                                         # SYNTH-REC-1005 and crp_day4 are in the ward fixture
 
 
 def test_must_not_appear_in_outputs(tmp_path, monkeypatch):
@@ -747,7 +747,7 @@ def test_must_not_appear_in_outputs(tmp_path, monkeypatch):
     assert not scorer.outputs(h, art, t)[0]
 
 
-def test_stack_never_edits_figures_output():
+def test_ward_never_edits_figures_output():
     import inspect
     src = inspect.getsource(endware.run_figure)
     assert 'open(lp, "a")' not in src and "data_check" not in src and not hasattr(endware, "data_check")
@@ -760,7 +760,7 @@ def _counted_calls(h):
 
 def test_notes_clean_world_passes():
     h, *_ = world()
-    assert all(r.get("note", {}).get("claim") in __import__("stack.notes").notes.CLAIMS for r in h.counted())
+    assert all(r.get("note", {}).get("claim") in __import__("ward.notes").notes.CLAIMS for r in h.counted())
     assert scorer.notes(h, {})[0], scorer.notes(h, {})
 
 
@@ -800,7 +800,7 @@ def test_note_path_expectations_claim_and_sensitive_flag():
     h, *_ = world()
     steps = h.counted()
     pe = [{"step": i + 1, "expected_claim": r["note"]["claim"], "sensitive_step": bool(r.get("sensitive_step")),
-           "expected_env_result": __import__("stack.notes").notes.env_result(r)} for i, r in enumerate(steps)]
+           "expected_env_result": __import__("ward.notes").notes.env_result(r)} for i, r in enumerate(steps)]
     assert scorer.notes(h, {"path_expectations": pe})[0]
     bad = [dict(p) for p in pe]; bad[0]["expected_claim"] = "CL-TICKED"
     assert not scorer.notes(h, {"path_expectations": bad})[0]
@@ -812,7 +812,7 @@ def test_note_path_expectations_claim_and_sensitive_flag():
 
 def test_letters_figures_never_read_notes():
     import inspect
-    from stack import adapter
+    from ward import adapter
     assert "note" not in inspect.getsource(adapter.facts) and "note\"" not in inspect.getsource(endware)
 
 
@@ -865,7 +865,7 @@ def test_order_seed_never_moves_the_fixture_clock():
 
 
 def test_same_seed_replay_is_byte_identical(tmp_path):
-    from stack import runner
+    from ward import runner
     sid = "S09-overdue-order"
     a, _ = runner.run(sid, str(tmp_path / "a"), "English", order_seed=3)
     b, _ = runner.run(sid, str(tmp_path / "b"), "English", order_seed=3)
@@ -877,7 +877,7 @@ def test_same_seed_replay_is_byte_identical(tmp_path):
     ({"accepted": False, "block": "BK-NO-PACK", "reason": "x"}, "blocked", "CL-BLOCKED"),
 ])
 def test_claim_rule_refused_vs_blocked(resp, result, claim):
-    from stack import notes
+    from ward import notes
     rec = {"kind": "call", "method": "step", "args": [{"type": "submit"}], "accepted": False, "response": resp}
     assert notes.env_result(rec) == result and notes.claim_for(result) == claim
     ok = dict(rec, accepted=True, response={"accepted": True})
@@ -886,6 +886,13 @@ def test_claim_rule_refused_vs_blocked(resp, result, claim):
 
 
 def test_answer_that_escalates_still_claims_answered():
-    from stack import notes
+    from ward import notes
     assert notes.claim_for("answered+escalated") == "CL-ANSWERED"
     assert notes.claim_for("declined+escalated") == "CL-DECLINED"
+
+
+def test_fixture_paths_are_repo_relative_whatever_the_repo_was_called():
+    from ward.scorer import _repo_relative
+    old = "st" + "ack"
+    assert _repo_relative(f"{old}/cases/x.toml") == _repo_relative("ward/cases/x.toml") == "cases/x.toml"
+    assert _repo_relative("cases/x.toml") == "cases/x.toml"

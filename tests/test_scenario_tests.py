@@ -1,7 +1,7 @@
 """S05 scenario-test checkers: each passes on a correct fixture and fails on a broken one.
 Declarations are read (read-only) from the S05 answer file. Observations are fake fixtures; no trace is run."""
 import copy, os, tomllib, pytest
-from stack import scenario_tests as st, adapter, scorer
+from ward import scenario_tests as st, adapter, scorer
 from truthgate import missing_truth, truth_path
 
 EP = st.EP

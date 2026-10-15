@@ -1,7 +1,7 @@
 """S14 replay flake root cause: figures stamped 'drawn <box clock, minute>' into the legends, so two runs either side
 of a minute boundary differed. The harness now hands figures the scenario clock; the legend never shows the box clock."""
 import re, tempfile
-from stack import runner
+from ward import runner
 
 
 def test_figure_legend_drawn_time_is_the_scenario_clock():

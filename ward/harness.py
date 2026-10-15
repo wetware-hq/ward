@@ -162,7 +162,7 @@ class Harness:
             except Exception as e:                             # forms refuses by its own synthetic flag
                 reason = str(e)
         else:
-            reason = self._line("RF-EXPORT-REAL")               # orders has no synthetic flag yet: stack refuses
+            reason = self._line("RF-EXPORT-REAL")               # orders has no synthetic flag yet: ward refuses
         r = {"accepted": reason is None, "reason": reason or "", "by": "middleware" if hasattr(env, "export") else "harness"}
         self._emit(COUNTED, actor="harness", role="harness", discipline=None, patient=patient, episode=scratch_id,
                    method="export", args=[{"synthetic": False}], adversarial=True, accepted=r["accepted"], response=r,
@@ -276,7 +276,7 @@ class Harness:
 
     def declined_rows(self, patient):
         """Questions the patient declined (last event a decline), as letters' --declined rows: item, section (data:
-        scenario_data [letter_sections]), safety, sensitive (stack sidecar), question, question_plain (the form text).
+        scenario_data [letter_sections]), safety, sensitive (ward sidecar), question, question_plain (the form text).
         'lines' is added per letter by the caller from its own line sources."""
         from .adapter import sensitive_ids
         secs = _toml.load(open(os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "cases",
@@ -640,7 +640,7 @@ class Harness:
 
     def sensitive_refs(self, episode_id):
         """Sensitive question ids of an episode and event ids of their answers. The environment decides, not the agent:
-        a forms question with sensitive=true, or (gap) the stack sidecar."""
+        a forms question with sensitive=true, or (gap) the ward sidecar."""
         ep = self.episodes.get(episode_id)
         if not ep or ep.kind != "forms" or not isinstance(ep.case, str):
             return set()
@@ -656,7 +656,7 @@ class Harness:
 
     def _escalate_sensitive(self, ep, env, new, idx):
         """A sensitive safety question answered with its alert answer goes to the clinician queue the same day
-        (item number plus text). forms has no sensitive field (gap), so the stack sidecar names the items."""
+        (item number plus text). forms has no sensitive field (gap), so the ward sidecar names the items."""
         if ep.kind != "forms" or not isinstance(ep.case, str):
             return
         from .adapter import sensitive_ids

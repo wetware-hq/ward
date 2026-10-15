@@ -53,7 +53,7 @@ def test_guard_flags_a_self_check(tmp_path):
 
 def signing_texts():
     import os
-    d = pathlib.Path(os.environ.get("STACK_SIBLINGS_DIR") or ROOT.parent) / "wording"
+    d = pathlib.Path(os.environ.get("WARD_SIBLINGS_DIR") or ROOT.parent) / "wording"
     return [f.read_text(encoding="utf-8") for f in sorted(d.glob("*.md"))
             if re.search(r"SIGNED|SAFETY", f.name) and not re.search(r"bak|DRAFT|RETIRED", f.name)]
 

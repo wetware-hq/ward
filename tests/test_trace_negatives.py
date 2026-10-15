@@ -1,6 +1,6 @@
 """Room ruling: each tamper below must make its trace fail on its own (the untampered run passes that check)."""
 import copy, re, pytest
-from stack import runner, scorer
+from ward import runner, scorer
 from truthgate import missing_truth, truth_path
 
 S08, S05 = "S08-three-fails-escalation", "S05-mh-screen-by-patient-agent"

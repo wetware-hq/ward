@@ -3,8 +3,8 @@ response carrying a line_id must carry that line's whole signed text (slots fill
 string that begins like a signed line must be that whole line."""
 import json, re, tempfile
 import pytest
-from stack import runner, scorer
-from stack.scenarios import SCENARIOS
+from ward import runner, scorer
+from ward.scenarios import SCENARIOS
 from signed_source import signed_rows as _signed_rows
 
 
@@ -26,7 +26,7 @@ def _strings(x):
 
 
 def mismatches(h):
-    from stack import locales, adapter
+    from ward import locales, adapter
     signed = _signed_rows(); signed.update(_signed_rows("letters_status_lines_SIGNED.md"))
     signed.update({k: v for k, v in adapter.letters_signed().items() if "{" not in v})   # letters signing files
     heads = {t.split("[")[0][:24]: (lid, t) for lid, t in signed.items() if len(t.split("[")[0]) >= 12}

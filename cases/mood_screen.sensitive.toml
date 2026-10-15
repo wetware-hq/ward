@@ -1,2 +1,2 @@
-# Stack sidecar (gap: forms questions have no sensitive field). Synthetic.
+# Ward sidecar (gap: forms questions have no sensitive field). Synthetic.
 sensitive = ["mh_q2"]

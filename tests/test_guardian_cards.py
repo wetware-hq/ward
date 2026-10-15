@@ -1,8 +1,8 @@
 """S13 guardian access: the harness reaches the cards grant call and reads cards' grant_state (cards is not edited);
 a guardian session acts only while that grant is current, and only for the child on the card."""
-from stack import loader, notes
-from stack.harness import Harness
-from stack.scenarios import CASE, DISC, A, answer
+from ward import loader, notes
+from ward.harness import Harness
+from ward.scenarios import CASE, DISC, A, answer
 from signed_source import signed_rows as _signed_rows
 
 P, EP, G, GR, GX = "SYNTH-PERSON-C13", "SYNTH-EP-1301", "SYNTH-PERSON-G13", "SYNTH-PERSON-G13R", "SYNTH-PERSON-G13X"

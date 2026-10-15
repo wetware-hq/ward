@@ -1,12 +1,12 @@
-"""Generalisation guard: no hard-coded specialty, ward, discipline or drug name in stack code.
+"""Generalisation guard: no hard-coded specialty, ward, discipline or drug name in ward code.
 Those names live in signed lists and data files (cases/*.toml, data/domain_terms.toml)."""
 import os
-from stack import domainscan
+from ward import domainscan
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
 
-def test_stack_code_holds_no_domain_literals():
+def test_ward_code_holds_no_domain_literals():
     hits = [h for h in domainscan.scan(ROOT) if not h[0].endswith("domainscan.py")]
     assert hits == [], "\n".join(f"{f}:{ln} {k} {w}" for f, ln, k, w in hits)
 

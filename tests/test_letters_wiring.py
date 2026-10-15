@@ -1,11 +1,11 @@
-"""Stack -> letters wiring (landed letters features): the declined questions go to letters as --declined TOML built
+"""Ward -> letters wiring (landed letters features): the declined questions go to letters as --declined TOML built
 from the forms log; a patient letter carries the signed declined line and never an absence line; a GP letter with a
 line sourced from a declined sensitive question is refused with SENSITIVE_DECLINED_REFUSED; letters refusals are
 named by their signed letters id (letters_refusals_WORDING.md + _SAFETY.md)."""
 import re, tempfile
-from stack import adapter, endware, scenarios
-from stack.harness import Harness
-from stack.scenarios import SCENARIOS
+from ward import adapter, endware, scenarios
+from ward.harness import Harness
+from ward.scenarios import SCENARIOS
 
 S12 = "S12-patient-declines-safety-question-to-letter-with-privacy-line"
 S15 = "S15-obstetrics-au"
@@ -67,7 +67,7 @@ def test_s12_privacy_probes_planted_and_refused_by_id():
 def test_absence_rule_is_scoped_to_the_declined_item():
     """DECLINED-NO-ABSENCE-LINE (the answer file's strings are examples): an absence in another section is not about
     the declined question; one under its heading, or naming it, is."""
-    from stack.scorer import absence_lines
+    from ward.scorer import absence_lines
     art = {"letter": "## Your test results\n- none recorded.\n## Allergies\n- none recorded.\n"
                      "## Next\n- Allergies: none recorded\n"}
     assert absence_lines(art, ["none recorded"], ["allergies"]) == ["- none recorded.", "- Allergies: none recorded"]

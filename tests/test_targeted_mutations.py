@@ -3,7 +3,7 @@
 (b) G13F's grant expiry judged by the box clock, not the scenario clock -> S13-T-guardian-unexpired fails."""
 import datetime
 import pytest
-from stack import harness, scenario_tests as st
+from ward import harness, scenario_tests as st
 
 SIDS = {"S12": "S12-patient-declines-safety-question-to-letter-with-privacy-line", "S13": "S13-paeds-guardian-au",
         "S15": "S15-obstetrics-au"}

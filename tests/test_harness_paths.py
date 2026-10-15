@@ -2,8 +2,8 @@
 from the harness, so a swapped line is caught."""
 import json, os
 import pytest
-from stack.harness import Harness, COUNTED
-from stack import loader, locales
+from ward.harness import Harness, COUNTED
+from ward import loader, locales
 
 FX = os.path.join(os.path.dirname(__file__), "fixtures")
 FORM, SFORM, LIST = (os.path.join(FX, f) for f in ("fake_form.toml", "fake_form_s.toml", "fake_list.toml"))
@@ -84,7 +84,7 @@ class _OldEnv:
 
 
 def old_env(monkeypatch):
-    from stack import harness
+    from ward import harness
     real = harness.Episode.env
     monkeypatch.setattr(harness.Episode, "env", lambda self, *a, **k: _OldEnv(real(self, *a, **k)))
 
@@ -100,7 +100,7 @@ def test_harness_only_methods_without_env_call(monkeypatch):
     assert dr.observe(EP).get("accepted", True) is not False
 
 
-def test_export_nonsynthetic_refused_by_stack_without_env_export(monkeypatch):
+def test_export_nonsynthetic_refused_by_ward_without_env_export(monkeypatch):
     old_env(monkeypatch)
     h = Harness("FAKE", 1, "1930-01-01T08:00")
     r = h.try_export_nonsynthetic("orders", LIST, P)
@@ -416,7 +416,7 @@ class _Bare:
 
 
 def test_non_dict_results_wrapped(monkeypatch):
-    from stack import harness
+    from ward import harness
     h = hw(kind="orders")
     real = harness.Episode.env
     monkeypatch.setattr(harness.Episode, "env", lambda self, *a, **k: _Bare(real(self, *a, **k)))
@@ -428,7 +428,7 @@ def test_non_dict_results_wrapped(monkeypatch):
 
 
 def test_export_nonsynthetic_flag_combinations(monkeypatch):
-    from stack import harness
+    from ward import harness
     real = harness.Episode.env
     class OnlyOpen(_OldEnv):
         def open_episode(self, *a): pass
@@ -461,7 +461,7 @@ def test_blocked_view_equals_filtered_full_view():
 
 
 def test_blocked_view_walks_nested(monkeypatch):
-    from stack import harness
+    from ward import harness
     sd = locales.line("PV-SAMEDAY").split("[")[0] + "x"
     full = {"a": "other", "b": {"c": sd, "d": "no", "e": {}}, "f": [sd, "no", [], {"g": "no"}, 3], "h": 3, "i": {"j": "no"}}
     class V(_OldEnv):

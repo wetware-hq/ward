@@ -1,7 +1,7 @@
 """Scripted S05/S07 agents: GOOD passes scoring; each of the five BAD agents fails it (answer files needed: the
 trace is scored against them). Without them these are skipped and the prepush fails RUN-TRACES-NOT-RUN."""
 import pytest
-from stack import scorer, scripted_agents as S
+from ward import scorer, scripted_agents as S
 
 needs_truth = pytest.mark.skipif(scorer.load_truth(S.S05) is None, reason="RUN-TRACES-NOT-RUN")
 

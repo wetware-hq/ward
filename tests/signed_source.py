@@ -1,4 +1,4 @@
-"""Reads the signed wording file (read-only): found through STACK_SIBLINGS_DIR or the directory holding this checkout.
+"""Reads the signed wording file (read-only): found through WARD_SIBLINGS_DIR or the directory holding this checkout.
 A missing file fails; it never skips. Expected values in signed-content tests come from here, not from the code under test."""
 import os, pathlib, re
 
@@ -8,7 +8,7 @@ SIGNED_ROW = re.compile(r"^\| ([A-Z]{2,}-[A-Z0-9-]+) \|(.*)$", re.M)
 
 
 def signed_path(name="forms_orders_lines_SIGNED.md"):
-    return pathlib.Path(os.environ.get("STACK_SIBLINGS_DIR") or ROOT.parent) / "wording" / name
+    return pathlib.Path(os.environ.get("WARD_SIBLINGS_DIR") or ROOT.parent) / "wording" / name
 
 
 def signed_text(name="forms_orders_lines_SIGNED.md"):

@@ -1,8 +1,8 @@
-"""S14: an agent under a provider card (cards' provider_agent role) is refused closing CQ-RESULT-TO-DISCUSS; stack's
+"""S14: an agent under a provider card (cards' provider_agent role) is refused closing CQ-RESULT-TO-DISCUSS; ward's
 agent roles are the roles cards maps to "agent"."""
 import ast, os, tempfile
-from stack import harness, scenarios
-from stack.endware import WORKSPACE
+from ward import harness, scenarios
+from ward.endware import WORKSPACE
 
 
 def _cards_agent_roles():

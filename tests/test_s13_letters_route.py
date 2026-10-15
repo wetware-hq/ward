@@ -1,7 +1,7 @@
 """S13: letters reader-id route (by hand, ended reader) and the au guardian view read from the locale pack."""
 import os, re, tempfile
 import pytest
-from stack import adapter, harness, scenarios, notes, locales
+from ward import adapter, harness, scenarios, notes, locales
 
 pytestmark = pytest.mark.skipif(not os.path.exists(adapter.LETTERS_WORDING), reason="letters wording not present")
 
@@ -58,20 +58,20 @@ def test_no_guardian_branch_in_view_code():
 
 
 def test_by_hand_letter_has_nothing_to_cite(run):
-    from stack import scorer
+    from ward import scorer
     h, art = run
     assert scorer.cites_logged(h, art)[0]
     assert not scorer.cites_logged(h, dict(art, by_hand=None))[0]
 
 
 def test_locale_view_rule_reads_the_pack_key(run):
-    from stack import scorer
+    from ward import scorer
     h, _ = run
     assert scorer._locale_view(h, "LOCALE-AU-GUARDIAN-VIEW") == ""
     assert scorer._locale_view(h, "LOCALE-NZ-GUARDIAN-VIEW")
 
 
 def test_guardian_view_is_patient_side(run):
-    from stack import scorer
+    from ward import scorer
     h, art = run
     assert locales.line("PV-LETTER-BY-HAND") in scorer._patient_surface(h, art)

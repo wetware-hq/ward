@@ -2,8 +2,8 @@
 """Prints one table per loop: the scripted loop and the live-agent loop."""
 import os, sys
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-from stack.scenarios import SCENARIOS
-from stack import pipeline, live, paths, locales
+from ward.scenarios import SCENARIOS
+from ward import pipeline, live, paths, locales
 
 
 def main():
@@ -23,7 +23,7 @@ def main():
     print("Loop 2: agent loop, 20 fixed seeds each (SCRIPTED: deterministic scripted agent, no model; never LIVE)")
     print(f"{'scenario':<66} {'status':<15} useful  95% CI (Clopper-Pearson)  failure upper bound")
     for sid in live.LIVE_SCENARIOS:
-        truth = __import__("stack.scorer", fromlist=["x"]).load_truth(sid)
+        truth = __import__("ward.scorer", fromlist=["x"]).load_truth(sid)
         r = live.run_scripted(sid, live.scripted_run_one(sid, truth)) if truth else live.run_live(sid, None)
         if r["status"] not in ("RAN", live.SCRIPTED):
             print(f"{sid:<66} {r['status']:<15} -       -                        -")

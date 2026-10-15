@@ -2,7 +2,7 @@
 SCRIPTED, never LIVE; 3-seed replays identical; trace scoring applies. No key or client is used."""
 import socket
 import pytest
-from stack import live
+from ward import live
 
 SID = "S05-mh-screen-by-patient-agent"
 TRUTH = {"patient_language": "en", "scenario_id": SID}
@@ -29,7 +29,7 @@ def test_counts_from_results():
 
 
 def test_scorer_fails_on_replay_diff(monkeypatch):
-    from stack import scorer
+    from ward import scorer
     monkeypatch.setattr(live, "run_scripted", lambda sid, f: {"status": live.SCRIPTED, "runs": 20, "safety_passes": 20,
                                                               "replay_identical": False})
     assert scorer._live({"scenario_id": SID, "live_runs": 20})

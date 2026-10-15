@@ -1,5 +1,5 @@
 # Synthetic patient card for S13 (invented child, 1930s dates). Data only: guardian grants are read through
-# cards' grant_state, never decided in stack code.
+# cards' grant_state, never decided in ward code.
 [header]
 card_id = "SYNTH-CARD-1301"
 kind = "patient"

@@ -2,7 +2,7 @@
 without the answer files. Templates and patient lines are read from the signed source."""
 import copy
 import pytest
-from stack import scenario_tests as st
+from ward import scenario_tests as st
 from signed_source import signed_rows as _signed_rows
 
 SIGNED = _signed_rows()

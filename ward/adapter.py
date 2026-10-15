@@ -10,7 +10,7 @@ alert carries through. Letter status wording comes from <siblings>/wording/lette
 is read from letters_status_lines_SIGNED.md (PENDING WORDING if only the draft exists). letters has no input for these fields (gap), so they reach it as notes lines."""
 import csv, io, os, re, tomllib
 
-from stack.paths import SIBLINGS as WORKSPACE
+from ward.paths import SIBLINGS as WORKSPACE
 LT_SIGNED_FILE = os.path.join(WORKSPACE, "wording", "letters_status_lines_SIGNED.md")
 LT_DRAFT_FILE = os.path.join(WORKSPACE, "wording", "letters_status_lines_DRAFT.md")
 LT_SIGNED = os.path.exists(LT_SIGNED_FILE)   # PENDING WORDING unless the signed table exists
@@ -73,7 +73,7 @@ def lt(line_id, **f):
 
 
 def sensitive_ids(case_path):
-    """forms questions have no 'sensitive' field (gap); a stack sidecar <case>.sensitive.toml lists them."""
+    """forms questions have no 'sensitive' field (gap); a ward sidecar <case>.sensitive.toml lists them."""
     if not case_path:
         return set()
     side = case_path.replace(".toml", ".sensitive.toml")
@@ -144,7 +144,7 @@ def letter_lines(fs, audience, phrases, sources=None):
     phrases: item_id -> (text if yes, text if no) for answered questions (scenario wording, not status wording).
     sources: if a list, one source record per line is appended: what the line was built from (kind, item, event)."""
     from .harness import AGENT_ROLES  # noqa: F401
-    rel = __import__("stack.loader", fromlist=["forms"]).forms()._deps["messages"].RELATIONSHIP
+    rel = __import__("ward.loader", fromlist=["forms"]).forms()._deps["messages"].RELATIONSHIP
     out = []
     src = sources if sources is not None else []
 

@@ -1,9 +1,9 @@
 """S14 held results and S15 sensitive decline: the clean run passes each check; each tamper fails it on its own.
 S13-S15 truth folders have no patient_wording.md yet, so the truth is read from truth.toml directly here."""
 import copy, json, os, tomllib, pytest
-from stack import runner, scorer, harness, paths
-from stack.harness import Harness
-from stack.scenarios import s14, s15, SCENARIOS
+from ward import runner, scorer, harness, paths
+from ward.harness import Harness
+from ward.scenarios import s14, s15, SCENARIOS
 from truthgate import missing_truth, truth_path
 
 S14, S15 = "S14-oncology-results-au", "S15-obstetrics-au"
@@ -170,7 +170,7 @@ def test_held_not_in_patient_side_bundle():
 
 
 def test_adapter_skips_held_ticks_and_declined_sensitive_for_clinicians():
-    from stack import adapter
+    from ward import adapter
     log = [{"type": "tick", "id": "j", "evidence": "R1", "role": "n", "discipline": None, "timestamp": "T"},
            {"type": "tick", "id": "k", "evidence": "R2", "role": "n", "discipline": None, "timestamp": "T"}]
     b = {"episode_id": "SYNTH-E", "kind": "orders", "blocks": [], "export": {"all_done": True, "log": log},
@@ -186,7 +186,7 @@ def test_adapter_skips_held_ticks_and_declined_sensitive_for_clinicians():
 
 def test_gate_grant_holder_units(tmp_path):
     import shutil
-    from stack import locales
+    from ward import locales
     form = tmp_path / "f.toml"
     shutil.copy(os.path.join(os.path.dirname(__file__), "fixtures", "fake_form.toml"), form)
     (tmp_path / "f.sensitive.toml").write_text('sensitive = ["fake_b"]\n')
@@ -221,7 +221,7 @@ def _fake_held_h(trace):
 
 
 def test_held_hidden_unit_roles_and_unicode():
-    from stack import scorer, locales
+    from ward import scorer, locales
     wait = locales.line("PV-RESULT-WAITING")
     base = [{"op": "session", "actor": "SYNTH-dr", "role": "clinician"},
             {"op": "session", "actor": "SYNTH-pa", "role": "patient"},
@@ -238,7 +238,7 @@ def test_held_hidden_unit_roles_and_unicode():
 
 
 def test_gp_no_source_needs_a_source_record():
-    from stack import scorer
+    from ward import scorer
     assert scorer._gp_no_source({"clinician_letter": {"notes": "a\nb"}}, "x") == ["no source record"]
     assert scorer._gp_no_source({"clinician_letter": {"notes": "a\nb", "sources": [[]]}}, "x") == ["no source record"]
 
@@ -266,7 +266,7 @@ def test_grant_holder_gate_spares_patient_and_clinician(tmp_path):
 
 
 def test_decline_hidden_counts_only_declined_sensitive(tmp_path):
-    from stack import scorer
+    from ward import scorer
     h, P, EP = _declined_form(tmp_path)
     pa = h.session(P, "patient", P)
     pa.step(EP, {"type": "decline", "question_id": "fake_a"})                 # declined, not sensitive
@@ -299,7 +299,7 @@ def test_s15_agent_overwrite_tamper_fails(tmp_path):
 
 
 def test_s15_t1_runs_the_grant_holder_check(tmp_path):
-    from stack import scenario_tests as st
+    from ward import scenario_tests as st
     h, art = run(S15, s15, tmp_path)
     assert st.IMPLEMENTED["S15-T1-decline-in-grant-holder-view"](h, art, {}) == []
     h2, _ = run(S15, s15, tmp_path / "t", tamper="grant_holder_sees_decline")
@@ -315,9 +315,9 @@ def _interp_missing(art):
 
 
 def test_interp_withheld_on_both_patient_and_clinician_figures(tmp_path):
-    from stack.endware import run_figure
+    from ward.endware import run_figure
     seed, start, pack, *_ = SCENARIOS["S10b-results-figure-au"]
-    from stack.scenarios import s10b
+    from ward.scenarios import s10b
     h = Harness("S10b-results-figure-au", seed, start, pack=pack, language="en")
     s10b(h, str(tmp_path / "base"))
     ep = next(e for e, x in h.episodes.items() if x.kind == "orders")
@@ -333,8 +333,8 @@ def test_interp_withheld_on_both_patient_and_clinician_figures(tmp_path):
 
 # ---------- ruling 11:52 / PV-RESUBMIT: review never finalises; resubmit by patient or clinician in person ----------
 from signed_source import signed_rows as _signed_rows
-from stack import notes as _notes
-from stack.scenarios import s12
+from ward import notes as _notes
+from ward.scenarios import s12
 S12 = "S12-patient-declines-safety-question-to-letter-with-privacy-line"
 
 
@@ -385,7 +385,7 @@ def test_resubmit_prompt_unit():
 
 @pytest.mark.parametrize("sid,fn", [(S15, s15), (S12, s12)])
 def test_resubmit_still_failing_never_reaches_check_pass(tmp_path, sid, fn):
-    from stack import scenario_tests as st
+    from ward import scenario_tests as st
     assert st.check_resubmit_still_failing(st.run_resubmit_still_failing(sid)) == []
     h, _ = run(sid, fn, tmp_path)                   # the clean run passes, so the checker must reject it
     assert st.check_resubmit_still_failing(h) == ["resubmit did not report ST-CHECK-FAIL", "trace reached ST-CHECK-PASS"]
@@ -420,8 +420,8 @@ def test_s14_raw_value_request_after_release_is_not_refused(tmp_path):
     ("S14-T1-held-value-in-patient-letter", "value_in_patient_letter", "value in a patient letter"),
     ("S14-T2-held-value-in-grant-holder-view", "value_in_grant_holder_view", "value in patient-side output")])
 def test_s14_t1_t2_fail_on_tamper_and_not_on_the_clean_run(tid, tamper, want):
-    from stack import scenario_tests as st
-    from stack.scorer import _held_hidden
+    from ward import scenario_tests as st
+    from ward.scorer import _held_hidden
     assert st.IMPLEMENTED[tid](None, None, {}) == []                       # the tampered run fails as declared
     assert any(want in f for f in _held_hidden(*st.run_s14_tamper(tamper)))
     assert _held_hidden(*st.run_s14_tamper(None)) == []                     # the clean run holds

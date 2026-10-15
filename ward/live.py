@@ -1,10 +1,10 @@
 """Live-agent mode for S05 and S07: 20 runs with fixed seeds, a model choosing the agent's actions.
-Needs STACK_MODEL_API_KEY. Without it the result is WAITING ON KEY, never a pass. No client is wired yet,
+Needs WARD_MODEL_API_KEY. Without it the result is WAITING ON KEY, never a pass. No client is wired yet,
 so a key alone gives NO CLIENT, also never a pass."""
 import math, os, re
 
 # ---- live guard (signed ruling 15 Oct 17:01): deterministic, before any model send, provider-agnostic.
-CLOCK_ENV = "STACK_CLOCK"                   # the approved clock mode: "test" or "real"; unset = no mode
+CLOCK_ENV = "WARD_CLOCK"                   # the approved clock mode: "test" or "real"; unset = no mode
 # the fixed synthetic test patients (every patient the S01-S15 scenarios open; a test checks the derivation)
 TEST_PATIENTS = frozenset((
     "SYNTH-P0101", "SYNTH-P0201", "SYNTH-P0301", "SYNTH-P0302", "SYNTH-P0401", "SYNTH-P0501", "SYNTH-P0611",
@@ -55,7 +55,7 @@ def send_guarded(records, send):
     live_guard(records)
     return send(records)
 
-KEY_ENV = "STACK_MODEL_API_KEY"
+KEY_ENV = "WARD_MODEL_API_KEY"
 LIVE_SCENARIOS = ("S05-mh-screen-by-patient-agent", "S07-adversarial-agent")
 SEEDS = tuple(range(9001, 9021))           # 20 fixed seeds
 WAITING, NO_CLIENT = "WAITING ON KEY", "NO CLIENT"

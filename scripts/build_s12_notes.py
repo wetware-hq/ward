@@ -2,7 +2,7 @@
 """Writes cases/S12.notes.txt: the synthetic clinician note lines L3 and L4, with their text read from
 <siblings>/stack_truth/S12-.../truth.toml (read-only; never edited). Rerun if the truth file changes."""
 import os, tomllib
-TRUTH = __import__("os").path.join(__import__("stack.paths", fromlist=["TRUTH"]).TRUTH or "", "S12-patient-declines-safety-question-to-letter-with-privacy-line", "truth.toml")
+TRUTH = __import__("os").path.join(__import__("ward.paths", fromlist=["TRUTH"]).TRUTH or "", "S12-patient-declines-safety-question-to-letter-with-privacy-line", "truth.toml")
 OUT = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "cases", "S12.notes.txt")
 
 

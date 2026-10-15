@@ -1,13 +1,13 @@
 """One test per scenario trace. No answer-file setting: skipped as RUN-TRACES-NOT-RUN. Setting present: a missing
 answer file fails.
 Traces run by default. The ones in KNOWN_RED wait on forms, letters or truth changes outside this repo and are
-skipped with their reason; STACK_RUN_TRACES=1 runs them too."""
+skipped with their reason; WARD_RUN_TRACES=1 runs them too."""
 import os, pytest
-from stack.scenarios import SCENARIOS
-from stack import pipeline, scorer
+from ward.scenarios import SCENARIOS
+from ward import pipeline, scorer
 from truthgate import missing_truth, truth_path
 
-RUN_ALL = os.environ.get("STACK_RUN_TRACES") == "1"
+RUN_ALL = os.environ.get("WARD_RUN_TRACES") == "1"
 KNOWN_RED = {
     "S12-patient-declines-safety-question-to-letter-with-privacy-line": "waits on letters (privacy line, PRIVACY_BLOCKED refusals) and Physician's C15/allergy_any ruling; declined route scored in test_trace_negatives",
 }

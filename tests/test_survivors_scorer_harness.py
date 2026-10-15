@@ -2,9 +2,9 @@
 (no answer files). Expected lines are read from the signed source via the scorer's own lookup of the signing files."""
 import copy, tempfile, types
 import pytest
-from stack import scorer, harness
-from stack.harness import Harness
-from stack.scenarios import SCENARIOS
+from ward import scorer, harness
+from ward.harness import Harness
+from ward.scenarios import SCENARIOS
 
 
 def _run(prefix, tamper=None):

@@ -1,8 +1,8 @@
 """No machine 'ERR:' code may reach a queue line, a note or a letter, in any scenario. A refused call's own reason
 is the refused session's reply, not a queue line, note or letter, so it is not scanned here."""
 import pathlib, pytest
-from stack.scenarios import SCENARIOS
-from stack import runner, scorer
+from ward.scenarios import SCENARIOS
+from ward import runner, scorer
 
 
 @pytest.mark.parametrize("sid", list(SCENARIOS))

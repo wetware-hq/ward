@@ -1,9 +1,9 @@
 """S15-T1: a decline injected into a grant holder's reply fails, as text, id, count, gap or empty slot."""
 import copy, tempfile
 import pytest
-from stack import scorer
-from stack.harness import Harness
-from stack.scenarios import SCENARIOS
+from ward import scorer
+from ward.harness import Harness
+from ward.scenarios import SCENARIOS
 
 SID = "S15-obstetrics-au"
 

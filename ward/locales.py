@@ -6,9 +6,9 @@ question is shown (ruling), and never fall back to English or to the au term:
   BK-NO-PACK  when a letter is asked for under a pack letters doesn't have  (PENDING WORDING)"""
 import os, re
 
-from stack.paths import SIBLINGS as WORKSPACE
+from ward.paths import SIBLINGS as WORKSPACE
 SIGNED = os.path.join(WORKSPACE, "wording", "forms_orders_lines_SIGNED.md")
-PENDING_IDS = set()      # ids used by the stack but not yet in SIGNED; any id missing from SIGNED is PENDING WORDING
+PENDING_IDS = set()      # ids used by the ward but not yet in SIGNED; any id missing from SIGNED is PENDING WORDING
 PENDING_WORDING = "PENDING WORDING"
 # Signed decision-maker term per pack. Only au is backed by a signed source: forms RELATIONSHIP (signed).
 LEGAL_TERM_SOURCE = {"au": "forms/messages.py RELATIONSHIP['sdm']"}

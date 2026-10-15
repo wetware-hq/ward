@@ -1,4 +1,4 @@
-"""Stack implementations of the [[scenario_tests]] declared in truth files (read-only).
+"""Ward implementations of the [[scenario_tests]] declared in truth files (read-only).
 Each test has two parts: a step runner that drives the declared steps through the harness, and a checker
 that judges the observation against the declared expectations. Checkers are pure and unit-tested.
 Until Physician has checked an implementation against the answer file, its result is 'pending_review',
@@ -10,8 +10,12 @@ from . import adapter, loader
 PENDING_REVIEW = "pending_review"
 REVIEWED = {"S08-T-agent-resubmit-unchanged-accepted",  # Physician-signed 12:30
             "S05-T1-unconfirmed", "S05-T2-changed", "S05-T3-sensitive-cut", "S05-T4-decline",
-            "S05-T5-paraphrase-on-sensitive-step"}   # signed by Physician
-MH_CASE = None                            # set lazily: stack cases/mood_screen.toml
+            "S05-T5-paraphrase-on-sensitive-step",   # signed by Physician
+            # Physician sign-off 15 Oct 20:13
+            "S13-T-resubmit-still-failing", "S13-T-guardian-unexpired-by-scenario-clock",
+            "S14-T1-held-value-in-patient-letter", "S14-T2-held-value-in-grant-holder-view",
+            "S15-T1-decline-in-grant-holder-view", "S15-T-resubmit-still-failing"}
+MH_CASE = None                            # set lazily: ward cases/mood_screen.toml
 EP, P, AGENT = "SYNTH-EP-0591", "SYNTH-P0591", "SYNTH-agent-0591"
 
 
@@ -36,7 +40,7 @@ def _world():
     from .scenarios import CASE
     h = Harness("S05-scenario-test", 591, "1936-08-10T10:00")
     h.open_episode("forms", CASE("mood_screen"), EP, P)
-    dr = h.session("SYNTH-dr-0591", "clinician", P, discipline=__import__("stack.scenarios", fromlist=["DISC"]).DISC["MED"])
+    dr = h.session("SYNTH-dr-0591", "clinician", P, discipline=__import__("ward.scenarios", fromlist=["DISC"]).DISC["MED"])
     pa = h.session(P, "patient", P)
     ag = h.session(AGENT, "patient_agent", P)
     from .scenarios import access
@@ -322,7 +326,7 @@ IMPLEMENTED = {"S13-T-guardian-unexpired-by-scenario-clock": _s13_g13f,
                "S15-T-resubmit-still-failing": _resubmit_still_failing,
                "S14-T1-held-value-in-patient-letter": _s14_t("value_in_patient_letter", "value in a patient letter"),
                "S14-T2-held-value-in-grant-holder-view": _s14_t("value_in_grant_holder_view", "value in patient-side output"),
-               "S15-T1-decline-in-grant-holder-view": lambda h, art, d: __import__("stack.scorer", fromlist=["x"])._decline_hidden(h)}
+               "S15-T1-decline-in-grant-holder-view": lambda h, art, d: __import__("ward.scorer", fromlist=["x"])._decline_hidden(h)}
 
 
 def run_declared(sid, declared, h, art=None):

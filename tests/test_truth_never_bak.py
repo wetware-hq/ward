@@ -1,6 +1,6 @@
 """Scoring refuses any answer file whose path is a backup (*.bak-*), including a backup root or a symlink to one."""
 import os, pytest
-from stack import scorer
+from ward import scorer
 
 
 def _tree(root, sid="S99-x"):

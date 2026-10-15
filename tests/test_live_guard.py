@@ -2,10 +2,10 @@
 sent on refusal. Expected lines come from the signed source (forms_orders_lines_SIGNED.md via forms WORDING)."""
 import tempfile
 import pytest
-from stack import live
-from stack.scorer import _line_text as signed_line          # forms WORDING, synced from forms_orders_lines_SIGNED.md
-from stack.harness import Harness
-from stack.scenarios import SCENARIOS
+from ward import live
+from ward.scorer import _line_text as signed_line          # forms WORDING, synced from forms_orders_lines_SIGNED.md
+from ward.harness import Harness
+from ward.scenarios import SCENARIOS
 
 CLEAN = {"patient": "SYNTH-P1501", "date": "1937-10-16", "events": [{"at": "1936-03-09T09:00"}]}
 
@@ -67,5 +67,12 @@ def test_patient_list_is_the_scenario_set():
 
 
 def test_lines_are_staff_only():
-    from stack import scorer
+    from ward import scorer
     assert {"RF-LIVE-NOT-TEST", "RF-LIVE-CLOCK-NOT-TEST"} <= set(scorer.STAFF_ONLY_LINES)
+
+
+def test_guard_reads_ward_clock_only(monkeypatch):
+    assert live.CLOCK_ENV == "WARD_CLOCK" and live.KEY_ENV == "WARD_MODEL_API_KEY"
+    monkeypatch.delenv("WARD_CLOCK", raising=False)
+    monkeypatch.setenv("ST" + "ACK_CLOCK", "test")                # the old name never opens the guard
+    _refused([CLEAN], "RF-LIVE-CLOCK-NOT-TEST")

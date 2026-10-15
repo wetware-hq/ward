@@ -3,9 +3,9 @@ RF-GRANT-ENDED (pending signing), nothing changes); CL-CLOSED names the clinicia
 person claims CL-TREND-CLOSED (unsigned); the patient's agent may resend answers unchanged but never change one
 (RF-AGENT-ANSWER-CHANGED, unsigned). Unsigned ids carry no text until their rows land."""
 import datetime as _dt
-from stack import loader, notes
-from stack.harness import Harness
-from stack.scenarios import CASE, DISC, A, answer
+from ward import loader, notes
+from ward.harness import Harness
+from ward.scenarios import CASE, DISC, A, answer
 from signed_source import signed_rows as _signed_rows
 
 P, EP, G = "SYNTH-PERSON-C13", "SYNTH-EP-1301", "SYNTH-PERSON-G13"
@@ -81,7 +81,7 @@ class _BoxDateTime(_dt.datetime):
 
 def test_box_clock_does_not_change_the_grant_result(monkeypatch):
     """expires_at is compared with the scenario clock only: a box clock in 2026 (long after 1936-06-30) changes nothing."""
-    import time, stack.harness as H
+    import time, ward.harness as H
     monkeypatch.setattr(_dt, "date", _BoxDate)
     monkeypatch.setattr(_dt, "datetime", _BoxDateTime)
     monkeypatch.setattr(time, "time", lambda: 1_792_000_000.0)
@@ -102,7 +102,7 @@ def test_guardian_who_stays_pending_until_row_names_guardian():
 
 # ---- S14
 def s14_world():
-    from stack.scenarios import SCENARIOS
+    from ward.scenarios import SCENARIOS
     h = Harness("S14-test", 1414, "1937-04-01T07:00", pack="au", language="en")
     return h
 
@@ -112,7 +112,7 @@ def _held(h):
     h.open_episode("orders", CASE("onc_results"), EO, P4)
     dr = h.session("SYNTH-dr-14", "clinician", P4, discipline=DISC["ONC"])
     dr.step(EO, A("approve"))
-    from stack.scenarios import SCN
+    from ward.scenarios import SCN
     kind, text = SCN["results"]["S14"]["imaging"]
     h.record_result("SYNTH-dr-14", "SYNTH-REC-1406", P4, kind, "1937-04-28T08:00:00", text, "", kind=kind)
     return P4, EO, dr
@@ -150,7 +150,7 @@ def s08_passed():
     h.open_episode("forms", CASE("patient_history"), E8, P8, needs=("pack",))
     dr = h.session("SYNTH-dr-08", "clinician", P8, discipline=DISC["MED"])
     pa = h.session(P8, "patient", P8)
-    from stack.scenarios import access
+    from ward.scenarios import access
     dr.step(E8, A("approve"))
     pa.step(E8, access("grant", P8, "SYNTH-agent-08"))
     ag = h.session("SYNTH-agent-08", "patient_agent", P8)
@@ -181,7 +181,7 @@ def test_agent_resending_answers_unchanged_then_resubmit_accepted():
 
 def test_box_clock_patch_is_restored_after_the_test():
     """The patch above is scoped to its own test (pytest monkeypatch): the real clock is back for everything after."""
-    import time, stack.harness as H
+    import time, ward.harness as H
     assert _dt.date is not _BoxDate and _dt.datetime is not _BoxDateTime
     assert H.datetime is _dt and loader.cards().__dict__.get("date") is not _BoxDate
     assert abs(time.time() - _dt.datetime.now().timestamp()) < 5 and time.time() != 1_792_000_000.0
@@ -190,7 +190,7 @@ def test_box_clock_patch_is_restored_after_the_test():
 def test_guardian_ended_probes_only_in_s13():
     """The G13R/G13E guardians belong to S13's child; no other scenario probes with them."""
     import inspect
-    from stack import scenarios as S
+    from ward import scenarios as S
     for fn in (S.s12, S.s15):
         assert "G13R" not in inspect.getsource(fn) and "G13E" not in inspect.getsource(fn)
     assert "G13E" in inspect.getsource(S.s13)

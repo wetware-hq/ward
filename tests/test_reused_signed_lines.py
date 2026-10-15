@@ -1,6 +1,6 @@
-"""Lines stack reuses from another signed file match their signed source exactly (no skip)."""
+"""Lines ward reuses from another signed file match their signed source exactly (no skip)."""
 import re
-from stack import paths, scorer, endware
+from ward import paths, scorer, endware
 
 
 def _signed(name, lid):
@@ -14,7 +14,7 @@ def _signed(name, lid):
 
 
 def test_alert_template_matches_its_single_signed_source():
-    from stack import adapter
+    from ward import adapter
     assert adapter.LT_SIGNED_FILE.endswith("letters_status_lines_SIGNED.md")
     assert scorer.ALERT_TEMPLATE == _signed("letters_status_lines_SIGNED.md", "LT-SENSITIVE-ALERT-CLIN") \
         == adapter.lt_lines()["LT-SENSITIVE-ALERT-CLIN"]
@@ -26,5 +26,5 @@ def test_decline_text_is_in_every_signed_declined_line():
 
 
 def test_run_traces_not_run_matches_signed():
-    from stack import locales
+    from ward import locales
     assert locales.line(paths.NOT_RUN) == _signed("forms_orders_lines_SIGNED.md", paths.NOT_RUN)

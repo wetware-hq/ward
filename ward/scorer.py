@@ -7,7 +7,7 @@ import json, os, re, tomllib
 from . import loader, locales
 from .endware import letter_tags, DECLINE_TEXT
 
-from stack.paths import TRUTH as TRUTH_ROOT
+from ward.paths import TRUTH as TRUTH_ROOT
 DEFAULT_CEILING = 1.5
 PENDING = "PENDING TRUTH"
 FOOTER = "Draft: check against the record before sending."
@@ -138,6 +138,13 @@ def _find_item(h, item):
     return None
 
 
+def _repo_relative(path):
+    """Answer files name fixtures from the repo root under the repo's name at the time ('<repo>/cases/x.toml'); the
+    leading repo folder is dropped whatever it was called, so a rename never breaks the lookup."""
+    parts = path.split("/", 1)
+    return parts[1] if len(parts) == 2 and parts[0] not in ("cases", "data", "tests", "scripts") else path
+
+
 def outputs(h, art, truth):
     outcome = str(truth.get("expected_outcome", "PASS")).upper()
     exp_blocks = expected_blocks(truth)
@@ -170,7 +177,7 @@ def outputs(h, art, truth):
         bad.append(f"must_not_appear_in_letters: {x}")
     for fx in truth.get("fixture_items_required", []):
         path = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
-                            fx.get("fixture", "").removeprefix("stack/"))
+                            _repo_relative(fx.get("fixture", "")))
         if not (os.path.exists(path) and f'"{fx.get("id")}"' in open(path).read()):
             bad.append(f"fixture {fx.get('fixture')} lacks {fx.get('id')}")
     text = _artifact_text(art)
@@ -665,7 +672,7 @@ def adversarial_refuse(h, truth):
 
 
 def scenario_tests(h, truth, art=None):
-    """Extra scripted tests declared in the truth file. Each needs a stack implementation; until it has one it
+    """Extra scripted tests declared in the truth file. Each needs a ward implementation; until it has one it
     fails as not implemented (never a silent pass)."""
     from .scenario_tests import run_declared
     res = run_declared(truth.get("scenario_id", ""), truth.get("scenario_tests", []), h, art)
@@ -950,7 +957,7 @@ LIVE_RUN_ONE = None   # seed -> (safety_all_pass, useful); the live-agent client
 
 def _live(truth):
     """live_runs / safety_must_pass: the fixed-seed live-agent loop must have run in full; no key or no client fails."""
-    from stack import live
+    from ward import live
     if "live_runs" not in truth and "safety_must_pass" not in truth:
         return []
     sid = truth.get("scenario_id")

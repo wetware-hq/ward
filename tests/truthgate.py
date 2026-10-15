@@ -1,7 +1,7 @@
 """Answer-file gate for tests: with no answer-file setting a trace test is skipped as RUN-TRACES-NOT-RUN (never
 reported as passed); with the setting present a missing answer file fails the test, never skips it."""
 import os, pytest
-from stack import paths
+from ward import paths
 
 
 def missing_truth(sid=""):

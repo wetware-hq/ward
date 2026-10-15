@@ -1,6 +1,6 @@
 """Room ruling 09:42: a line id is signed in exactly one file. Scans every signing file (*SIGNED*.md, *SAFETY*.md;
-not backups, drafts or retired files) in the wording dirs named by settings: STACK_WORDING_DIRS (os.pathsep list)
-or STACK_SIBLINGS_DIR/wording, else the wording dir beside this checkout. Read-only."""
+not backups, drafts or retired files) in the wording dirs named by settings: WARD_WORDING_DIRS (os.pathsep list)
+or WARD_SIBLINGS_DIR/wording, else the wording dir beside this checkout. Read-only."""
 import collections, os, pathlib, re
 
 HERE = pathlib.Path(__file__).resolve().parent
@@ -10,9 +10,9 @@ BULLET = re.compile(r"^-\s*([A-Z]{2,}-[A-Z0-9-]+) signed\b", re.M)
 
 
 def wording_dirs():
-    if os.environ.get("STACK_WORDING_DIRS"):
-        return [pathlib.Path(p) for p in os.environ["STACK_WORDING_DIRS"].split(os.pathsep) if p]
-    return [pathlib.Path(os.environ.get("STACK_SIBLINGS_DIR") or ROOT.parent) / "wording"]
+    if os.environ.get("WARD_WORDING_DIRS"):
+        return [pathlib.Path(p) for p in os.environ["WARD_WORDING_DIRS"].split(os.pathsep) if p]
+    return [pathlib.Path(os.environ.get("WARD_SIBLINGS_DIR") or ROOT.parent) / "wording"]
 
 
 def signing_files():

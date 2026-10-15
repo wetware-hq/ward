@@ -1,7 +1,7 @@
 """Every line the scorer resolves comes from its single current signed source, byte-exact: the id is signed in
 exactly one signing file and _line_text returns that file's raw cell (one pad space each side removed)."""
 import glob, os, re, tomllib
-from stack import scorer, paths, adapter
+from ward import scorer, paths, adapter
 from test_no_duplicate_signed_ids import signing_files
 from truthgate import truth_path
 

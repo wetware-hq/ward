@@ -1,7 +1,7 @@
 """An answer-file probe the scorer does not implement fails its scenario; the full env result (after the colon) is
 compared; each refusal probe needs its own refused call."""
 from types import SimpleNamespace
-from stack import scorer, live
+from ward import scorer, live
 
 
 def _h(trace):

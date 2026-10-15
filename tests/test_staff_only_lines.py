@@ -1,9 +1,9 @@
 """RF-CLOCK-UNSET is signed for staff and agents only: it never appears (id or signed text) in any patient view,
 patient-side reply or letter. A planted copy must be caught."""
 import tempfile, pytest
-from stack import scorer
-from stack.harness import Harness
-from stack.scenarios import SCENARIOS
+from ward import scorer
+from ward.harness import Harness
+from ward.scenarios import SCENARIOS
 from signed_source import signed_rows as _signed_rows
 
 

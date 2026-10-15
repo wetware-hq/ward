@@ -1,4 +1,4 @@
-# Stack copy of forms/examples/patient_history.toml (synthetic). Only change: allergy_any alert_route = before_procedure,
+# Ward copy of forms/examples/patient_history.toml (synthetic). Only change: allergy_any alert_route = before_procedure,
 # per the answer files (alert_routes). Do not edit by hand otherwise.
 # Synthetic example. A patient (or their agent) fills this in before a clinic visit.
 form_id = "patient-history"

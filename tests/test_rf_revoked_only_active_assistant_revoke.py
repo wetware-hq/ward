@@ -1,9 +1,9 @@
 """Guard (ruling 12:19): RF-REVOKED fires only for an assistant grant that was actively revoked. A grant holder who
 is not an assistant (guardian, decision-maker) or an expired grant gets RF-GRANT-ENDED instead."""
 import json, tempfile, pytest
-from stack import loader
-from stack.harness import Harness
-from stack.scenarios import SCENARIOS
+from ward import loader
+from ward.harness import Harness
+from ward.scenarios import SCENARIOS
 from signed_source import signed_rows as _signed_rows
 
 ASSISTANTS = ("patient_agent", "clinician_agent")
@@ -39,7 +39,7 @@ def test_expired_guardian_never_gets_rf_revoked():
 def test_cards_expired_grant_is_not_rf_revoked(monkeypatch):
     monkeypatch.setenv("CARDS_CLOCK", "test")                  # cards' approved clock: scenario time, set explicitly
     monkeypatch.setenv("CARDS_SCENARIO_CLOCK", "1936-03-09")
-    from stack.scenarios import CASE
+    from ward.scenarios import CASE
     c = loader.cards()
     card = c.load(open(CASE("S13_card"), encoding="utf-8").read())
     env = c.Env(now="1936-03-09") if hasattr(c, "Env") else None

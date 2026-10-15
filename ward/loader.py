@@ -3,7 +3,7 @@ same names, so a plain import of both in one process collides (interface gap G1)
 with its own copies of those modules and kept under a private name."""
 import importlib.util, os, sys
 
-from stack.paths import SIBLINGS as WORKSPACE
+from ward.paths import SIBLINGS as WORKSPACE
 _CACHE = {}
 
 
@@ -23,7 +23,7 @@ def load(repo, module):
             sys.modules[dep] = m
             spec.loader.exec_module(m)
             deps[dep] = m
-        spec = importlib.util.spec_from_file_location(f"_stack_{repo}", os.path.join(root, module + ".py"))
+        spec = importlib.util.spec_from_file_location(f"_ward_{repo}", os.path.join(root, module + ".py"))
         mod = importlib.util.module_from_spec(spec)
         spec.loader.exec_module(mod)
         mod._deps = deps

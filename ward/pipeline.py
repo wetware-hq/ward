@@ -8,7 +8,7 @@ def evaluate(sid, outroot=None, truth_root=None):
     truth = scorer.load_truth(sid, truth_root)
     if truth is None:
         return {"scenario": sid, "status": scorer.PENDING}
-    outroot = outroot or tempfile.mkdtemp(prefix="stack-")
+    outroot = outroot or tempfile.mkdtemp(prefix="ward-")
     adversarial = SCENARIOS[sid][4]
     h, art = runner.run(sid, os.path.join(outroot, sid, "a"), truth["patient_language"])
     rerun = lambda: runner.run(sid, os.path.join(outroot, sid, "b"), truth["patient_language"])

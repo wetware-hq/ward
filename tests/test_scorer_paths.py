@@ -1,7 +1,7 @@
 """Scorer, adapter and locale behaviour on hand-built fakes (no scenario run)."""
 import types
 import pytest
-from stack import scorer, adapter, locales
+from ward import scorer, adapter, locales
 
 EPI = "SYNTH-FAKE-EP1"
 
@@ -173,7 +173,7 @@ def A(q, role, v=True): return {"type": "answer", "question_id": q, "role": role
 
 
 def test_consent_paths():
-    from stack import loader
+    from ward import loader
     you = loader.forms()._deps["messages"].LINES["PV-ANS-SELF"]
     ok, why = scorer.consent(CH({EPI: [A("q", "patient_agent")]}, [(EPI, {"q": you + " yes"})]), {})
     assert why["failures"] == [("a", EPI, "q")]
@@ -203,7 +203,7 @@ def test_consent_paths():
 
 
 def test_consent_letter_decline_lines():
-    from stack.endware import DECLINE_TEXT
+    from ward.endware import DECLINE_TEXT
     h = CH({EPI: [{"type": "decline", "question_id": "q", "role": "patient"}, A("r", "patient")]}, peek={"answers": {}})
     art = lambda notes, refs: {"tool": "letters", "notes": notes, "refs": refs}
     ref = [[{"episode": EPI, "event": 0}]]

@@ -115,7 +115,7 @@ def _run(job):
                 shutil.copy2(ROOT / f, work / f)
         (work / path).write_text(code)
         r = subprocess.run([sys.executable, "-m", "pytest", "-x", "-q", "-p", "no:cacheprovider"], cwd=work, capture_output=True,
-                           env=dict(os.environ, STACK_SIBLINGS_DIR=os.environ.get("STACK_SIBLINGS_DIR") or str(ROOT.parent)))
+                           env=dict(os.environ, WARD_SIBLINGS_DIR=os.environ.get("WARD_SIBLINGS_DIR") or str(ROOT.parent)))
         return label if r.returncode == 0 else None
 
 
