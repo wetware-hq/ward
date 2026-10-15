@@ -18,3 +18,10 @@ python3 scripts/report.py                 # one table per loop
 python3 scripts/mutate.py                 # mutation test of the locale-block guard
 python3 scripts/build_s12_notes.py        # rebuild cases/S12.notes.txt from stack_truth
 ```
+
+## Fresh-clone bar
+
+`scripts/bar.sh SIBLINGS` runs the forms, orders, figures, letters, cards and stack prepush checks with every
+setting they read (`scripts/bar.sh SIBLINGS --env` prints them without running anything). SIBLINGS holds the clones
+and the read-only folders `stack_truth/`, `cards_truth/`, `cards_wording/` and `wording/`. With those set, letters
+deselects none of its 6 `needs_signed` tests and cards none of its 38; unset, both prepush checks fail.
