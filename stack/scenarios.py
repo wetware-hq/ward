@@ -531,10 +531,15 @@ def s15(h, out, tamper=None):
 
 
 # ---------------------------------------------------------------- S13 (guardian for a young child, au)
+def PERSON_GRANT(person):
+    from .harness import PERSON_GRANTS
+    return PERSON_GRANTS[person]
+
+
 def s13(h, out, tamper=None):
     """Registered against the frozen answer file. The guardian's access is a cards grant read through cards'
-    grant_state. Still open, never papered over here: letters has no reader-id (--to) route, so the by-hand letter
-    and CQ-LETTER-READER-ENDED cannot happen yet; the score shows it."""
+    grant_state. The by-hand letter
+    and CQ-LETTER-READER-ENDED come from letters' --to reader-id route (card + grant id)."""
     P, EP, G = "SYNTH-PERSON-C13", "SYNTH-EP-1301", "SYNTH-PERSON-G13"
     h.open_episode("forms", CASE("paeds_history"), EP, P, needs=("pack",))
     dr = h.session("SYNTH-dr-13", "clinician", P, discipline=DISC["PAE"])
@@ -557,7 +562,21 @@ def s13(h, out, tamper=None):
     gd.step(EP, A("submit"))                                     # resubmit: the full check re-runs
     h.check(EP)
     gd.observe(EP)
-    return letter(h, out, P, [EP], "Patient", "discharge letter to guardian", {})
+    card, now = CASE("S13_card"), h.clock.date().isoformat()
+    art = letter(h, out, P, [EP], "Patient", "discharge letter to guardian", {},
+                 extra=["--to", G, "--card", card, "--now", now, "--final"])   # no grant id: letters routes it by hand
+    h.guardian_view(EP, G)                                       # au locale pack names what the guardian sees
+    pr = letter(h, os.path.join(out, "probe-ended"), P, [EP], "Patient", "discharge letter to guardian", {}, audit=True,
+                extra=["--to", "SYNTH-PERSON-G13R", "--grant-id", PERSON_GRANT("SYNTH-PERSON-G13R"), "--card", card,
+                       "--now", now, "--final"])                 # reader whose grant was revoked
+    from .adapter import letters_refusal
+    lid, line = letters_refusal(pr.get("screen", ""))
+    h._emit("call", actor="harness", role="harness", patient=P, episode=EP, method="letters_build",
+            args=[{"brief": "discharge letter to guardian", "to": "SYNTH-PERSON-G13R"}], adversarial=True,
+            accepted=pr.get("exit") == 0, response={"accepted": pr.get("exit") == 0, "reason": line or "",
+                                                     "by": "letters", **({"line_id": lid} if lid else {})},
+            note={"claim": "CL-REFUSED", "reason": ""})
+    return art
 
 
 # id -> (seed, start, locale pack, script, adversarial, live-agent capable)

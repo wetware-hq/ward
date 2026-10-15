@@ -13,7 +13,7 @@ episode_id = "SYNTH-EP-1301"
 
 [[grant]]
 grant_id = "SYNTH-GR-1302"
-agent_id = "SYNTH-AG-1302"
+agent_id = "SYNTH-PERSON-G13R"
 agent_name = "Guardr"
 categories = ["general"]
 granted = "1935-06-01"
@@ -22,7 +22,7 @@ person_name = "R. Synthgard"
 
 [[grant]]
 grant_id = "SYNTH-GR-1301"
-agent_id = "SYNTH-AG-1301"
+agent_id = "SYNTH-PERSON-G13"
 agent_name = "Guard"
 categories = ["general"]
 granted = "1936-01-10"
@@ -31,7 +31,7 @@ person_name = "G. Synthgard"
 
 [[grant]]
 grant_id = "SYNTH-GR-1303"
-agent_id = "SYNTH-AG-1303"
+agent_id = "SYNTH-PERSON-G13E"
 agent_name = "Guarde"
 categories = ["general"]
 granted = "1936-01-15"
@@ -40,7 +40,7 @@ person_name = "E. Synthgard"
 
 [[grant]]
 grant_id = "SYNTH-GR-1304"
-agent_id = "SYNTH-AG-1304"
+agent_id = "SYNTH-PERSON-G13F"
 agent_name = "Guardf"
 categories = ["general"]
 granted = "1936-01-15"

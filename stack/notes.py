@@ -12,7 +12,7 @@ def env_result(rec):
     """The environment's own result for one counted trace record (read from the record only)."""
     k = rec.get("kind")
     if k == "endware":
-        return "built"
+        return "blocked" if rec.get("blocked") else "built"
     if k == "harness":
         if rec.get("op") == "open" and rec.get("blocks"):
             return "blocked"

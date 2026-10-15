@@ -1,3 +1,4 @@
+import os
 """Export adapter (cleared design). Input: one finished episode export bundle from the harness (one harness
 export call). It must be synthetic, check-passed and not blocked, else it is refused. The transform is pure:
 no environment calls. Outputs:
@@ -44,6 +45,10 @@ def letters_signed():
             out[rid] = cur if signed == "unchanged" else signed
     for key, text in re.findall(r'^- PRIVACY_BLOCKED (\w+): "([^"]+)"', w, re.M):
         out[f"PRIVACY_BLOCKED.{key}"] = text
+    safety = LETTERS_WORDING.replace("_WORDING", "_SAFETY")
+    if os.path.exists(safety):                # Physician re-signs override ('- <ID> re-signed (...): "..."')
+        for rid, text in re.findall(r'^- ([A-Z][A-Za-z_-]+) re-signed[^:]*: "([^"]+)"', open(safety, encoding="utf-8").read(), re.M):
+            out[rid] = text
     return out
 
 

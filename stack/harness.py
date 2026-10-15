@@ -32,6 +32,11 @@ def held_kinds(directory=None):
     return out
 
 
+def endware_letters():
+    from .endware import LETTERS
+    return LETTERS
+
+
 class Blocked(Exception):
     pass
 
@@ -89,6 +94,7 @@ class Harness:
         self.order_seed, self.independent = None, {}
         self.trace, self.episodes, self.records, self.artifacts = [], {}, {}, []
         self.person_grants = {}
+        self.issued = {}             # patient -> patient-side lines an end tool showed (e.g. letters' by-hand line)
         self.patient_cards = {}      # patient -> card a clinician read for this episode (cards grant_state source)
         self.leaks, self.now, self._adv = [], None, False
         self.held = {}                      # record id -> {"patient", "open"}: results held for discussion
@@ -416,6 +422,37 @@ class Harness:
         for ep in self.episodes.values():
             if ep.kind == "forms":
                 out.update({i: q["text"] for i, q in self._replayed(ep).q.items()})
+        return out
+
+    def guardian_view(self, episode_id, person):
+        """What a person acting for the patient sees: the locale pack whose rel is the person's cards grant rel
+        names the signed line ids shown; a line shows once it has been issued for this patient. Data only."""
+        import glob
+        ep = self.episodes[episode_id]
+        rel = (self.person_grants.get((ep.patient, person)) or {}).get("rel")
+        packs = [_toml.load(open(f, "rb")) for f in sorted(glob.glob(os.path.join(
+            os.path.dirname(endware_letters()), "locale", self.pack or "", "*_view.toml")))]
+        pk = next((x for x in packs if rel and x.get("rel") == rel), None)
+        if pk is None:
+            self._emit("harness", op="guardian_view", episode=episode_id, person=person, locale_key=None, result=[])
+            return []
+        issued = list(self.issued.get(ep.patient, []))
+        def walk(v):
+            if isinstance(v, str):
+                issued.append(v)
+            elif isinstance(v, dict):
+                [walk(x) for x in v.values()]
+            elif isinstance(v, list):
+                [walk(x) for x in v]
+        walk(self._replayed(ep).patient_view())
+        label = self._line_or_unsigned(pk.get("role_label", ""))
+        out = [label] if label else []
+        for lid in pk.get("shows", []):
+            t = self._line_or_unsigned(lid)
+            head = t.split("[")[0]
+            out += [x for x in issued if head and x.startswith(head) and x not in out]
+        self._emit("harness", op="guardian_view", episode=episode_id, person=person, locale_key=pk.get("key"),
+                   role_label=pk.get("role_label"), result=out)
         return out
 
     def patient_view(self, episode_id):

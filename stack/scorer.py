@@ -223,6 +223,18 @@ def outputs(h, art, truth):
         elif t == "status":
             want = _line_text(row.get("source_line", ""))
             ok = want is not None and any(want and st and want.split("[")[0] in st for st in _statuses(h))
+        elif t == "letter" and sec.startswith("no automatic letter"):
+            # letters routed it by hand: no letter, the signed by-hand line open in the clinician queue
+            tmpl = _line_text(row.get("source_line", "")) or ""
+            surf = "\n".join(q for eid in h.episodes for q in _queue_text(h, eid))
+            ok = art.get("by_hand") == row.get("source_line") and not art.get("letter") and bool(tmpl) \
+                and _fill_match(tmpl, surf)
+        elif sec.startswith("guardian view:"):
+            # the guardian view shows the source line filled with the pack's role label
+            gv = [r for r in h.trace if r.get("op") == "guardian_view"]
+            tmpl = _line_text(row.get("source_line", "")) or ""
+            ok = bool(gv and tmpl) and any(_fill_match(tmpl, x) and _line_text(r.get("role_label", "")) and
+                                           x.startswith(_line_text(r["role_label"])) for r in gv for x in r["result"])
         elif t == "letter":
             ok = art.get("tool") == "letters" and art.get("exit") == 0 and FOOTER in text and \
                 (not row.get("value") or row["value"] in text)
@@ -367,6 +379,15 @@ def _sensitive_cut(art, item, row):
 
 
 PATIENT_SIDE_ROLES = ("patient", "patient_agent")
+PATIENT_SIDE_VIEWS = ("patient_view", "guardian_view")   # a guardian's view is patient-side
+
+
+def _locale_view(h, key):
+    """'' when a guardian view was built from the locale pack named by key (data only); else why not."""
+    v = [r for r in h.trace if r.get("op") == "guardian_view"]
+    if not v:
+        return "no guardian view"
+    return "" if all(r.get("locale_key") == key for r in v) else f"view built from {[r.get('locale_key') for r in v]}"
 
 
 def _roles(h):
@@ -577,6 +598,8 @@ def safety_lines(h, art, truth):
         special = {"RESULT-HELD-BY-ENV": lambda: _held_hidden(h, art),
                    "DECLINE-HIDDEN-FROM-GRANT-HOLDERS": lambda: _decline_hidden(h),
                    "GP-LETTER-NO-SOURCE": lambda: _gp_no_source(art, sl.get("item", ""))}
+        if re.fullmatch(r"LOCALE-[A-Z]+-[A-Z-]+-VIEW", str(sl.get("line_id", ""))):
+            special[sl["line_id"]] = lambda k=sl["line_id"]: _locale_view(h, k)
         if sl.get("line_id") in special:
             why = special[sl["line_id"]]()
             if why:
@@ -657,7 +680,7 @@ def alert_routing(h, truth):
     line in the patient view, word for word from the signed table."""
     bad = []
     queue_surf = "\n".join(q for eid in h.episodes for q in _queue_text(h, eid))
-    pv = "\n".join(json.dumps(r["result"], ensure_ascii=False) for r in h.trace if r.get("op") == "patient_view")
+    pv = "\n".join(json.dumps(r["result"], ensure_ascii=False) for r in h.trace if r.get("op") in PATIENT_SIDE_VIEWS)
     for item, route in sorted(alert_routes(truth).items()):
         if route not in ROUTE_LINES:
             bad.append({"item": item, "why": f"unknown route {route}"}); continue
@@ -715,6 +738,8 @@ def _declined_letter_lines(h):
 
 
 def cites_logged(h, art):
+    if art.get("by_hand") and not art.get("letter"):      # letters routed it by hand: no letter, nothing to cite
+        return True, {"by_hand": art["by_hand"]}
     if art.get("tool") in ("block", "check"):
         return art["tool"] == "check" or any(r["kind"] == "block" for r in h.trace), {}
     bad = [r for r in art.get("refs", []) if isinstance(r, dict) and not _ref_ok(h, r)]
@@ -815,8 +840,8 @@ def consent(h, art):
 
 def _patient_surface(h, art):
     parts = [art.get("letter") or "" if art.get("tool") == "letters" and "to patient" in str(art.get("brief", "")) else ""]
-    parts += [json.dumps(r["result"], ensure_ascii=False) for r in h.trace if r.get("op") == "patient_view"]
-    parts += [json.dumps(r["response"], ensure_ascii=False) for r in h.calls() if r["role"] in ("patient", "patient_agent")]
+    parts += [json.dumps(r["result"], ensure_ascii=False) for r in h.trace if r.get("op") in PATIENT_SIDE_VIEWS]
+    parts += [json.dumps(r["response"], ensure_ascii=False) for r in h.calls() if r["role"] in ("patient", "patient_agent", "guardian")]
     parts += [str(h.peek(e).get("status") or "") for e, ep in h.episodes.items() if not ep.blocks]
     return "\n".join(parts)
 

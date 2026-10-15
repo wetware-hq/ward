@@ -83,6 +83,11 @@ def letter(h, out, patient, episodes, reader, brief, phrases=None, privacy=None,
     res = run_letter_text(h, "\n".join(lines) + "\n", refs, brief, out, privacy, audit=audit, sources=sources,
                           declined=h.declined_rows(patient), extra=extra)
     res.update(facts=fs, wording=adapter.wording_status())
+    if res.get("hand"):                       # stays open for a clinician until the letter is written by hand
+        h._emit("harness", op="clinician_queue", episode=episodes[0], patient=patient, line_id="CQ-LETTER-BY-HAND",
+                text=res["hand"]["text"], open=True)
+        if res["hand"]["patient_line"]:
+            h.issued.setdefault(patient, []).append(res["hand"]["patient_line"])
     return res
 
 
@@ -116,12 +121,28 @@ def run_letter_text(h, text, refs, brief, outdir, privacy=None, audit=False, sou
         cmd += list(extra)
         r = subprocess.run(cmd, capture_output=True, text=True, cwd=os.path.dirname(LETTERS))
     letter = open(os.path.join(outdir, "letter.md")).read() if r.returncode == 0 else ""
-    h._emit("endware", tool="letters", brief=brief, exit=r.returncode, **({"audit": True} if audit else {}))
+    hand = _by_hand(r.stdout + r.stderr) if r.returncode else None
+    h._emit("endware", tool="letters", brief=brief, exit=r.returncode, **({"audit": True} if audit else {}),
+            **({"blocked": hand["line_id"]} if hand else {}))
     with open(os.path.join(outdir, "notes.refs.json"), "w") as f:
         json.dump({"notes": text.splitlines(), "refs": refs, **({"sources": sources} if sources is not None else {})}, f, indent=1)
     return {"tool": "letters", "brief": brief, "exit": r.returncode, "letter": letter, "notes": text, "refs": refs,
             **({"sources": sources} if sources is not None else {}),
-            "screen": r.stdout + r.stderr, "path": os.path.join(outdir, "letter.md")}
+            "screen": r.stdout + r.stderr, "path": os.path.join(outdir, "letter.md"),
+            **({"by_hand": hand["line_id"], "hand": hand} if hand else {})}
+
+
+def _by_hand(screen):
+    """letters' by-hand route as shown: the signed CQ line (check number filled) and the patient's PV line."""
+    from . import scorer
+    cq, pv = scorer._line_text("CQ-LETTER-BY-HAND"), scorer._line_text("PV-LETTER-BY-HAND")
+    if not cq:
+        return None
+    m = re.search(re.sub(r"\\\[[^\]]*?\\\]", ".+?", re.escape(cq)), screen)
+    if not m:
+        return None
+    return {"line_id": "CQ-LETTER-BY-HAND", "text": m.group(0),
+            "patient_line": pv if pv and pv in screen else None}
 
 
 def letter_tags(letter):

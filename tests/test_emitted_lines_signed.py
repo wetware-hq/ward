@@ -28,6 +28,7 @@ def _strings(x):
 def mismatches(h):
     from stack import locales, adapter
     signed = _signed_rows(); signed.update(_signed_rows("letters_status_lines_SIGNED.md"))
+    signed.update({k: v for k, v in adapter.letters_signed().items() if "{" not in v})   # letters signing files
     heads = {t.split("[")[0][:24]: (lid, t) for lid, t in signed.items() if len(t.split("[")[0]) >= 12}
     bad = []
     for r in h.trace:
