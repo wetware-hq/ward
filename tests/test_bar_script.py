@@ -25,3 +25,11 @@ def test_missing_folder_fails(tmp_path):
     (tmp_path / "cards_wording").rmdir()
     r = subprocess.run(["bash", str(BAR), str(tmp_path), "--env"], capture_output=True, text=True)
     assert r.returncode == 2 and "CARDS_WORDING" in r.stdout
+
+
+def test_backup_truth_refused(tmp_path):
+    _tree(tmp_path)
+    (tmp_path / "stack_truth").rename(tmp_path / "stack_truth.bak-r9")
+    (tmp_path / "stack_truth").symlink_to(tmp_path / "stack_truth.bak-r9")
+    r = subprocess.run(["bash", str(BAR), str(tmp_path), "--env"], capture_output=True, text=True)
+    assert r.returncode == 2 and "backup" in r.stdout

@@ -50,6 +50,8 @@ def load_truth(sid, root=None):
         return None
     d = os.path.join(root or TRUTH_ROOT, sid)
     t, w = os.path.join(d, "truth.toml"), os.path.join(d, "patient_wording.md")
+    if re.search(r"\.bak", os.path.realpath(t)):         # only the live locked answer file, never a backup
+        raise ValueError(f"{sid}: refusing a backup answer file")
     if not (os.path.isfile(t) and os.path.isfile(w)):
         return None
     with open(t, "rb") as f:
@@ -447,6 +449,19 @@ def staff_only_in_patient_output(h, art):
     return sorted(set(out))
 
 
+# a decline leaks as arithmetic too: 'N of M answered', 'N not answered', a blank where the question was
+GAP_PATTERNS = (r"\b\d+\s+of\s+\d+\b[^\"]{0,20}\banswered\b", r"\b\d+\s+(?:questions?\s+)?(?:not answered|unanswered|left blank|skipped|missing)\b")
+
+
+def _empty_slot(v, dec):
+    """True when a reply keeps a declined question's slot but leaves it empty."""
+    if isinstance(v, dict):
+        return any(k in dec and x in ("", None, [], {}) for k, x in v.items()) or any(_empty_slot(x, dec) for x in v.values())
+    if isinstance(v, list):
+        return any(_empty_slot(x, dec) for x in v)
+    return False
+
+
 def _decline_hidden(h):
     """DECLINE-HIDDEN-FROM-GRANT-HOLDERS: no grant holder or card agent reply names a declined sensitive question
     (id, text, number) or shows a before-procedure or declined line."""
@@ -473,6 +488,8 @@ def _decline_hidden(h):
                 blob = json.dumps(c.get("response"), default=str)
                 if any(re.search(p, blob) for p in pats):
                     fails.append(f"decline visible to {c.get('actor')} at seq {c['seq']}")
+                elif any(re.search(p, blob, re.I) for p in GAP_PATTERNS) or _empty_slot(c.get("response"), dec):
+                    fails.append(f"decline visible as a count, gap or empty slot to {c.get('actor')} at seq {c['seq']}")
     return fails
 
 

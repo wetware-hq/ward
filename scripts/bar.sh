@@ -20,6 +20,7 @@ export MUTATE_WORKERS="${MUTATE_WORKERS:-4}"
 for v in STACK_TRUTH CARDS_TRUTH CARDS_WORDING WORDING_DIRS REUSED_SIGNED CARDS_SIGNED; do
   [ -e "${!v}" ] || { echo "missing $v: ${!v}"; exit 2; }
 done
+case "$(realpath "$STACK_TRUTH")" in *.bak*) echo "refusing a backup answer folder"; exit 2;; esac
 if [ "${2:-}" = "--env" ]; then
   env | grep -E '^(STACK_|LETTERS_TRUTH|CARDS_|WORDING_DIRS|REUSED_SIGNED|MUTATE_WORKERS)' | sed "s#$S#\$SIBLINGS#" | sort
   exit 0
