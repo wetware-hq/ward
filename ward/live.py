@@ -123,8 +123,19 @@ def scripted_run_one(sid, truth):
     return one
 
 
+class ModelKeyVisible(RuntimeError):
+    """A scripted run saw a model key or provider setting; nothing was run."""
+
+
+def _no_model_key():
+    seen = sorted(k for k in os.environ if k == "WARD_MODEL_API_KEY" or k.startswith("OPENROUTER"))
+    if seen:
+        raise ModelKeyVisible(f"scripted run refused: model settings visible: {', '.join(seen)} (clear them; bar.sh does)")
+
+
 def run_scripted(sid, run_one):
     """All SEEDS through the scripted agent, plus identical replays of REPLAY_SEEDS (run twice, same digest)."""
+    _no_model_key()
     res = {s: run_one(s) for s in SEEDS}
     replay = all(run_one(s)[2] == res[s][2] for s in REPLAY_SEEDS)
     useful = sum(bool(u) for _, u, _ in res.values())

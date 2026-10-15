@@ -69,7 +69,7 @@ functions = [
 
 [[modules]]
 path = "ward/live.py"
-functions = ["live_guard", "send_guarded", "_strings"]
+functions = ["live_guard", "send_guarded", "_strings", "_no_model_key"]
 
 # A refusal must not change the calling handle, the episodes or the trace beyond its own refusal record.
 [[session]]

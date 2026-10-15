@@ -17,6 +17,7 @@ export CARDS_TRUTH="$S/cards_truth" CARDS_WORDING="$S/cards_wording"
 export WORDING_DIRS="$S/wording" REUSED_SIGNED="$S/wording/forms_orders_lines_SIGNED.md"
 export CARDS_SIGNED="$S/wording/cards_lines_SIGNED.md"
 export WARD_FIGURES_PYTHON="${WARD_FIGURES_PYTHON:-$(command -v python3)}"   # needs figures' packages (a fresh clone has no figures/.venv)
+unset WARD_MODEL_API_KEY $(compgen -e | grep '^OPENROUTER' || true)   # scripted only: no model key reaches any run
 export MUTATE_WORKERS="${MUTATE_WORKERS:-4}"
 for r in forms orders figures letters cards ward; do       # every repo by name; fail loudly when one is missing
   [ -d "$S/$r" ] || { echo "missing repo: $r"; [ "$r" = ward ] && [ -d "$S/st""ack" ] && echo "found the old name st""ack/: rename it to ward/"; exit 2; }
@@ -26,11 +27,19 @@ for v in WARD_TRUTH CARDS_TRUTH CARDS_WORDING WORDING_DIRS REUSED_SIGNED CARDS_S
 done
 case "$(realpath "$WARD_TRUTH")" in *.bak*) echo "refusing a backup answer folder"; exit 2;; esac
 if [ "${2:-}" = "--env" ]; then
+  echo "unset WARD_MODEL_API_KEY OPENROUTER*"
   env | grep -E '^(WARD_|LETTERS_TRUTH|CARDS_|WORDING_DIRS|REUSED_SIGNED|MUTATE_WORKERS)' | sed "s#$S#\$SIBLINGS#" | sort
   exit 0
 fi
 rc=0
-run() { echo "== $1"; (cd "$S/$1" && shift && "$@") || { echo "!! $1 failed"; rc=1; }; }
+KEEP="WARD_SIBLINGS_DIR WARD_TRUTH LETTERS_TRUTH CARDS_TRUTH CARDS_WORDING WORDING_DIRS REUSED_SIGNED CARDS_SIGNED WARD_FIGURES_PYTHON MUTATE_WORKERS"
+PROBE="$S/ward/scripts/key_probe.py"
+# each run is a child with a whitelisted environment (env -i); the key probe runs in it before any test code
+run() {
+  local d="$S/$1"; shift; echo "== ${d##*/}"
+  local e=(PATH="$PATH" HOME="$HOME" LANG="${LANG:-C.UTF-8}"); for v in $KEEP; do e+=("$v=${!v}"); done
+  (cd "$d" && env -i "${e[@]}" sh -c 'python3 "$0" . && exec "$@"' "$PROBE" "$@") || { echo "!! ${d##*/} failed"; rc=1; }
+}
 run forms   python3 scripts/prepush.py "$REUSED_SIGNED"
 run orders  python3 scripts/prepush.py "$REUSED_SIGNED"
 run figures python3 scripts/prepush.py "$REUSED_SIGNED"
