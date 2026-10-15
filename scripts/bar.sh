@@ -16,6 +16,7 @@ export WARD_TRUTH="$S/stack_truth" LETTERS_TRUTH="$S/stack_truth"
 export CARDS_TRUTH="$S/cards_truth" CARDS_WORDING="$S/cards_wording"
 export WORDING_DIRS="$S/wording" REUSED_SIGNED="$S/wording/forms_orders_lines_SIGNED.md"
 export CARDS_SIGNED="$S/wording/cards_lines_SIGNED.md"
+export WARD_FIGURES_PYTHON="${WARD_FIGURES_PYTHON:-$(command -v python3)}"   # needs figures' packages (a fresh clone has no figures/.venv)
 export MUTATE_WORKERS="${MUTATE_WORKERS:-4}"
 for r in forms orders figures letters cards ward; do       # every repo by name; fail loudly when one is missing
   [ -d "$S/$r" ] || { echo "missing repo: $r"; [ "$r" = ward ] && [ -d "$S/st""ack" ] && echo "found the old name st""ack/: rename it to ward/"; exit 2; }

@@ -9,7 +9,8 @@ import json, os, re, subprocess, sys, tempfile
 from ward.paths import SIBLINGS as WORKSPACE
 LETTERS = os.path.join(WORKSPACE, "letters", "letters.py")
 FIGURES_DIR = os.path.join(WORKSPACE, "figures")
-FIGURES_PY = os.path.join(FIGURES_DIR, ".venv", "bin", "python")
+FIGURES_PY = os.environ.get("WARD_FIGURES_PYTHON") or next(   # setting, else figures' own .venv, else this interpreter
+    (p for p in [os.path.join(FIGURES_DIR, ".venv", "bin", "python")] if os.path.exists(p)), sys.executable)
 TAG = re.compile(r"\[(L\d+(?:,\s*L\d+)*)\]")
 DECLINE_TEXT = "chose not to answer"       # a decline is never written as a no
 
