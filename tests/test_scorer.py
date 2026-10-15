@@ -4,6 +4,7 @@ from stack.harness import Harness
 from stack import scorer, live, locales
 from stack.endware import DECLINE_TEXT
 from stack import adapter
+from truthgate import missing_truth, truth_path
 
 FX = os.path.join(os.path.dirname(__file__), "fixtures")
 FORM, LIST = os.path.join(FX, "fake_form.toml"), os.path.join(FX, "fake_list.toml")
@@ -213,7 +214,9 @@ def test_adapter_csv_columns():
 
 def test_letter_wording_status_follows_signed_table():
     assert adapter.wording_status() == ("signed" if adapter.LT_SIGNED else adapter.PENDING_WORDING)
-    assert len(adapter.lt_lines()) == 11
+    import re
+    rows = re.findall(r"^\| (LT-[A-Z0-9-]+) \|", open(adapter.LT_SIGNED_FILE, encoding="utf-8").read(), re.M)
+    assert rows and sorted(adapter.lt_lines()) == sorted(rows)          # read off the signed file, no fixed count
 
 
 # ---- outputs, wording, locale
@@ -389,7 +392,7 @@ def test_sensitive_declined_also_cut_for_clinician():
     pa.step(EP, {"type": "decline", "question_id": "fake_a"})
     pa.step(EP, {"type": "answer", "question_id": "fake_b", "value": False})
     texts = " ".join(t for _, t, _ in adapter.letter_lines(adapter.facts(passed_bundle(h)), "clinician", {}))
-    assert "fake question A" not in texts and "Safety alert: a sensitive" in texts
+    assert texts == ""          # S15 ruling (15 Oct): a declined sensitive question leaves nothing in clinician letters
 
 
 def test_exact_block_set_and_check_end():
@@ -719,7 +722,7 @@ def test_waiting_parent_queue_row_in_outputs():
 def test_s08_answer_file_parses_with_waiting_parent():
     t = scorer.load_truth("S08-three-fails-escalation")
     if t is None:
-        pytest.skip(scorer.PENDING)
+        missing_truth()
     assert t["min_calls"] == 16
     assert any(x.get("line_id") == "CQ-WAITING-PARENT" for x in t.get("safety_lines", []))
     assert any(x.get("source_line") == "CQ-WAITING-PARENT" for x in t.get("expected_outputs", []))
@@ -728,7 +731,7 @@ def test_s08_answer_file_parses_with_waiting_parent():
 def test_s10b_answer_file_fields_read():
     t = scorer.load_truth("S10b-results-figure-au")
     if t is None:
-        pytest.skip(scorer.PENDING)
+        missing_truth()
     assert t["min_calls"] == 15 and t["expected_plotted_points"] == 3 and t["must_not_appear"] == ["FG-REFUSE-DATA"]
     h, *_ = world()
     ok, d = scorer.outputs(h, {"tool": "letters", "exit": 0, "letter": ""}, {"fixture_items_required": t.get("fixture_items_required", [])})

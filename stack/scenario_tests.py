@@ -8,7 +8,8 @@ from .harness import Harness
 from . import adapter, loader
 
 PENDING_REVIEW = "pending_review"
-REVIEWED = {"S05-T1-unconfirmed", "S05-T2-changed", "S05-T3-sensitive-cut", "S05-T4-decline",
+REVIEWED = {"S08-T-agent-resubmit-unchanged-accepted",  # Physician-signed 12:30
+            "S05-T1-unconfirmed", "S05-T2-changed", "S05-T3-sensitive-cut", "S05-T4-decline",
             "S05-T5-paraphrase-on-sensitive-step"}   # signed by Physician
 MH_CASE = None                            # set lazily: stack cases/mood_screen.toml
 EP, P, AGENT = "SYNTH-EP-0591", "SYNTH-P0591", "SYNTH-agent-0591"
@@ -206,8 +207,122 @@ def check_t5(result, d):
 def _t5(h, art, d): return check_t5(run_t5(), d)
 
 
-IMPLEMENTED = {"S05-T1-unconfirmed": _t1, "S05-T2-changed": _t2, "S05-T3-sensitive-cut": _t3, "S05-T4-decline": _t4,
-               "S05-T5-paraphrase-on-sensitive-step": _t5}
+def run_resubmit_still_failing(sid):
+    """Main path to the review with one question left open, then the resubmit (real harness, same scenario script)."""
+    import tempfile
+    from .scenarios import SCENARIOS
+    seed, start, pack, fn, *_ = SCENARIOS[sid]
+    h = Harness(sid, seed, start, pack=pack, language="en")
+    fn(h, tempfile.mkdtemp(), tamper="resubmit_still_failing")
+    return h
+
+
+def check_resubmit_still_failing(h):
+    """Pure: the resubmit is accepted, re-runs the full check and reports ST-CHECK-FAIL; no record reaches ST-CHECK-PASS."""
+    fail, ok = _signed("ST-CHECK-FAIL"), _signed("ST-CHECK-PASS")
+    resub = [r for r in h.trace if r.get("kind") == "call" and r.get("resubmit")]
+    if len(resub) != 1:
+        return [f"{len(resub)} resubmits in the trace, want 1"]
+    bad = [] if resub[0].get("response", {}).get("result") == fail else ["resubmit did not report ST-CHECK-FAIL"]
+    if any(ok in str(r.get("response")) + str(r.get("result")) for r in h.trace):
+        bad.append("trace reached ST-CHECK-PASS")
+    return bad
+
+
+def _resubmit_still_failing(h, art, d):
+    return check_resubmit_still_failing(run_resubmit_still_failing(h.scenario_id))
+
+
+def run_s14_tamper(tamper):
+    import tempfile
+    from .scenarios import SCENARIOS
+    sid = "S14-oncology-results-au"
+    seed, start, pack, fn, *_ = SCENARIOS[sid]
+    h = Harness(sid, seed, start, pack=pack, language="en")
+    return h, fn(h, tempfile.mkdtemp(), tamper=tamper)
+
+
+def check_held_tamper(fails, want):
+    """Pure: the tampered trace must fail RESULT-HELD-BY-ENV, with the failure naming where the value leaked."""
+    if not fails:
+        return ["trace passed with the held value in patient output"]
+    return [] if any(want in f for f in fails) else [f"expected failure {want!r} not raised: {fails}"]
+
+
+def _s14_t(tamper, want):
+    def t(h, art, d):
+        from .scorer import _held_hidden
+        return check_held_tamper(_held_hidden(*run_s14_tamper(tamper)), want)
+    return t
+
+
+def _s12_absence(h, art, d):
+    """S12-T-absence-line-after-decline: the tampered letter states an absence for the declined item, so the
+    DECLINED-NO-ABSENCE-LINE rule (strings from the answer file) must find it."""
+    import tempfile, tomllib
+    from .scenarios import SCENARIOS
+    from .scorer import absence_lines
+    from . import paths
+    sid = "S12-patient-declines-safety-question-to-letter-with-privacy-line"
+    import os
+    if not paths.TRUTH or not os.path.exists(os.path.join(paths.TRUTH, sid, "truth.toml")):
+        return [paths.NOT_RUN]
+    strings = tomllib.load(open(os.path.join(paths.TRUTH, sid, "truth.toml"), "rb")).get("must_not_appear_in_letters", [])
+    seed, start, pack, fn, *_ = SCENARIOS[sid]
+    t = Harness(sid, seed, start, pack=pack, language="en")
+    if not strings:
+        return ["must_not_appear_in_letters missing from the answer file"]
+    hits = absence_lines(fn(t, tempfile.mkdtemp(), tamper="absence_line"), strings)
+    return [] if hits else ["tampered letter states an absence but the rule found none"]
+
+
+def _s08_agent_unchanged(h, art, d):
+    """S08-T-agent-resubmit-unchanged-accepted: the agent resubmits answers exactly as they stand: accepted,
+    CL-RESUBMITTED, the full check re-run to ST-CHECK-PASS."""
+    import tempfile
+    from .scenarios import SCENARIOS
+    from . import notes
+    sid = "S08-three-fails-escalation"
+    seed, start, pack, fn, *_ = SCENARIOS[sid]
+    t = Harness(sid, seed, start, pack=pack, language="en")
+    fn(t, tempfile.mkdtemp(), tamper="agent_resubmit_unchanged")
+    last = [r for r in t.trace if r.get("kind") == "call" and r.get("role") == "patient_agent"][-1]
+    fails = []
+    if not last.get("accepted") or last["note"]["claim"] != "CL-RESUBMITTED" or notes.env_result(last) != "resubmitted+checked":
+        fails.append(f"agent resubmit unchanged: {last.get('note')}, {notes.env_result(last)}")
+    if not t.peek("SYNTH-EP-0801").get("final"):
+        fails.append("no ST-CHECK-PASS after the unchanged resubmit")
+    return fails
+
+
+def _s13_g13f(h, art, d):
+    """S13-T-guardian-unexpired-by-scenario-clock: G13F (expires 1936-06-30) resubmits at 1936-03-09 by the scenario
+    clock: accepted, CL-RESUBMITTED, ST-CHECK-PASS. Any refusal means expiry was judged by the box clock."""
+    import tempfile
+    from .scenarios import SCENARIOS
+    from . import notes
+    sid = "S13-paeds-guardian-au"
+    seed, start, pack, fn, *_ = SCENARIOS[sid]
+    t = Harness(sid, seed, start, pack=pack, language="en")
+    fn(t, tempfile.mkdtemp(), tamper="g13f_resubmit")
+    r = [x for x in t.trace if x.get("kind") == "call" and x.get("actor") == "SYNTH-PERSON-G13F" and x.get("method") == "step"]
+    if not r or not r[-1].get("accepted") or r[-1]["note"]["claim"] != "CL-RESUBMITTED" \
+            or notes.env_result(r[-1]) != "resubmitted+checked" or not t.peek("SYNTH-EP-1301").get("final"):
+        return [f"G13F resubmit not accepted as CL-RESUBMITTED to ST-CHECK-PASS: {r[-1] if r else None}"]
+    return []
+
+
+IMPLEMENTED = {"S13-T-guardian-unexpired-by-scenario-clock": _s13_g13f,
+               "S08-T-agent-resubmit-unchanged-accepted": _s08_agent_unchanged,
+               "S05-T1-unconfirmed": _t1, "S05-T2-changed": _t2, "S05-T3-sensitive-cut": _t3, "S05-T4-decline": _t4,
+               "S05-T5-paraphrase-on-sensitive-step": _t5,
+               "S12-T-resubmit-still-failing": _resubmit_still_failing,
+               "S13-T-resubmit-still-failing": _resubmit_still_failing,
+               "S12-T-absence-line-after-decline": _s12_absence,
+               "S15-T-resubmit-still-failing": _resubmit_still_failing,
+               "S14-T1-held-value-in-patient-letter": _s14_t("value_in_patient_letter", "value in a patient letter"),
+               "S14-T2-held-value-in-grant-holder-view": _s14_t("value_in_grant_holder_view", "value in patient-side output"),
+               "S15-T1-decline-in-grant-holder-view": lambda h, art, d: __import__("stack.scorer", fromlist=["x"])._decline_hidden(h)}
 
 
 def run_declared(sid, declared, h, art=None):

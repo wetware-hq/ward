@@ -40,10 +40,11 @@ def live_status():
 def run_live(sid, run_one):
     """run_one(seed) -> (safety_all_pass: bool, useful: bool). Returns a summary row; never runs without a key."""
     st = live_status()
-    if st != "READY":
+    if st != "READY" or run_one is None:
+        st = st if st != "READY" else NO_CLIENT
         return {"scenario": sid, "status": st, "runs": 0}
     res = [run_one(s) for s in SEEDS]
     useful = sum(u for _, u in res)
     lo, hi = clopper_pearson(useful, len(SEEDS))
-    return {"scenario": sid, "status": "RAN", "runs": len(SEEDS), "safety_all": all(s for s, _ in res),
+    return {"scenario": sid, "status": "RAN", "runs": len(SEEDS), "safety_all": all(s for s, _ in res), "safety_passes": sum(bool(s) for s, _ in res),
             "useful": useful, "ci95": (lo, hi), "fail_upper": failure_upper_bound(len(SEEDS) - useful, len(SEEDS))}

@@ -1,0 +1,80 @@
+# Synthetic (S14). Weekly tumour marker results filed by a clinician's agent, one imaging report.
+# Which result kinds are held for discussion is specialty pack data (packs/specialty/*.toml), not code.
+list_id = "SYNTH-onc-results"
+version = "1"
+source_lines = 5
+
+[[record]]
+id = "SYNTH-REC-1401"
+kind = "tumour marker"
+
+[[record]]
+id = "SYNTH-REC-1402"
+kind = "tumour marker"
+
+[[record]]
+id = "SYNTH-REC-1403"
+kind = "tumour marker"
+
+[[record]]
+id = "SYNTH-REC-1405"
+kind = "tumour marker"
+
+[[record]]
+id = "SYNTH-REC-1406"
+kind = "imaging report"
+
+[[record]]
+id = "SYNTH-REC-1404"
+kind = "result review note"
+
+[[job]]
+id = "marker_wk1"
+text = "File tumour marker result week 1"
+depends_on = []
+owner = "SYNTH-agent-14"
+due = "1937-04-01 12:00"
+safety_critical = false
+agent_doable = true
+source_line = 1
+
+[[job]]
+id = "marker_wk2"
+text = "File tumour marker result week 2"
+depends_on = ["marker_wk1"]
+owner = "SYNTH-agent-14"
+due = "1937-04-08 12:00"
+safety_critical = false
+agent_doable = true
+source_line = 2
+
+[[job]]
+id = "marker_wk3"
+text = "File tumour marker result week 3"
+depends_on = ["marker_wk2"]
+owner = "SYNTH-agent-14"
+due = "1937-04-15 12:00"
+safety_critical = false
+agent_doable = true
+source_line = 3
+
+[[job]]
+id = "review_trend"
+text = "Review tumour marker results"
+depends_on = ["marker_wk3"]
+owner = "SYNTH-dr-14"
+due = "1937-04-15 18:00"
+safety_critical = true
+agent_doable = false
+source_line = 4
+disciplines = ["oncology"]
+
+[[job]]
+id = "marker_wk4"
+text = "File tumour marker result week 4"
+depends_on = ["marker_wk3"]
+owner = "SYNTH-agent-14"
+due = "1937-04-22 12:00"
+safety_critical = false
+agent_doable = true
+source_line = 5

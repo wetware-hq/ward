@@ -1,0 +1,83 @@
+# Synthetic patient card for S13 (invented child, 1930s dates). Data only: guardian grants are read through
+# cards' grant_state, never decided in stack code.
+[header]
+card_id = "SYNTH-CARD-1301"
+kind = "patient"
+display_name = "C. Synthkid"
+person_name = "C. Synthkid"
+role = "patient"
+scope = ["read"]
+issued = "1935-06-01"
+expires = "1936-12-31"
+episode_id = "SYNTH-EP-1301"
+
+[[grant]]
+grant_id = "SYNTH-GR-1302"
+agent_id = "SYNTH-AG-1302"
+agent_name = "Guardr"
+categories = ["general"]
+granted = "1935-06-01"
+rel = "guardian"
+person_name = "R. Synthgard"
+
+[[grant]]
+grant_id = "SYNTH-GR-1301"
+agent_id = "SYNTH-AG-1301"
+agent_name = "Guard"
+categories = ["general"]
+granted = "1936-01-10"
+rel = "guardian"
+person_name = "G. Synthgard"
+
+[[grant]]
+grant_id = "SYNTH-GR-1303"
+agent_id = "SYNTH-AG-1303"
+agent_name = "Guarde"
+categories = ["general"]
+granted = "1936-01-15"
+rel = "guardian"
+person_name = "E. Synthgard"
+
+[[grant]]
+grant_id = "SYNTH-GR-1304"
+agent_id = "SYNTH-AG-1304"
+agent_name = "Guardf"
+categories = ["general"]
+granted = "1936-01-15"
+rel = "guardian"
+person_name = "F. Synthgard"
+
+[[grant_event]]
+grant_id = "SYNTH-GR-1302"
+event = "granted"
+at = "1935-06-01"
+
+[[grant_event]]
+grant_id = "SYNTH-GR-1301"
+event = "granted"
+at = "1936-01-10"
+
+[[grant_event]]
+grant_id = "SYNTH-GR-1303"
+event = "granted"
+at = "1936-01-15"
+
+[[grant_event]]
+grant_id = "SYNTH-GR-1304"
+event = "granted"
+at = "1936-01-15"
+
+[[grant_event]]
+grant_id = "SYNTH-GR-1302"
+event = "revoked"
+at = "1936-02-01"
+
+[[grant_event]]
+grant_id = "SYNTH-GR-1303"
+event = "expired"
+at = "1936-03-01"
+
+[[grant_event]]
+grant_id = "SYNTH-GR-1304"
+event = "expired"
+at = "1936-06-30"

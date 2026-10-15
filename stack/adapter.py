@@ -85,8 +85,8 @@ def facts(bundle):
                         "sensitive": i in sens, "safety": q["safety_critical"], "alert": q["alert_answer"]})
     else:
         for n, e in enumerate(log):
-            if e["type"] != "tick":
-                continue
+            if e["type"] != "tick" or e["evidence"] in bundle.get("held", ()):
+                continue                                  # held results never reach a patient-side output
             r = bundle["records"].get(e["evidence"], {})
             out.append({"episode": ep, "item_id": e["id"], "record": e["evidence"], "field": r.get("field", ""),
                         "text": r.get("text", ""), "value": r.get("text", ""), "unit": "", "recorded_at": e.get("timestamp", e.get("ts", "")),
@@ -122,6 +122,8 @@ def letter_lines(fs, audience, phrases, sources=None):
         if "record" in f:
             out.append((f["field"], f["text"], ev), "record"); continue
         q = f["text"].rstrip("?")
+        if f["sensitive"] and audience != "patient" and f["status"] == "declined":
+            continue                                      # a declined sensitive question: nothing at all in clinician letters
         if f["sensitive"] and audience != "patient":
             # leak guard: a sensitive answer's text never goes into clinician notes; the alert line and the
             # event id stand in its place, whatever the status

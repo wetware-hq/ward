@@ -2,6 +2,7 @@
 import re, pytest
 from stack import runner, scorer, adapter
 from stack.endware import letter
+from truthgate import missing_truth, truth_path
 
 FLAG = re.compile(r" \[flag: [^\]]+\]")
 S12 = "S12-patient-declines-safety-question-to-letter-with-privacy-line"
@@ -15,7 +16,7 @@ def need(sid):
     import os
     t = scorer.load_truth(sid)
     if t is None:
-        pytest.skip(scorer.PENDING)
+        missing_truth(sid)
     red = KNOWN_RED.get("S05" if sid == S05 else "")
     if red and os.environ.get("STACK_RUN_TRACES") != "1":
         pytest.skip(f"known red, trace {sid}: " + red)

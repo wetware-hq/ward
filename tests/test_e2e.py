@@ -1,9 +1,11 @@
-"""One test per scenario trace. PENDING TRUTH (skip) until both truth files exist.
+"""One test per scenario trace. No answer-file setting: skipped as RUN-TRACES-NOT-RUN. Setting present: a missing
+answer file fails.
 Traces run by default. The ones in KNOWN_RED wait on forms, letters or truth changes outside this repo and are
 skipped with their reason; STACK_RUN_TRACES=1 runs them too."""
 import os, pytest
 from stack.scenarios import SCENARIOS
 from stack import pipeline, scorer
+from truthgate import missing_truth, truth_path
 
 RUN_ALL = os.environ.get("STACK_RUN_TRACES") == "1"
 KNOWN_RED = {
@@ -14,7 +16,7 @@ KNOWN_RED = {
 @pytest.mark.parametrize("sid", list(SCENARIOS))
 def test_trace(sid, tmp_path):
     if scorer.load_truth(sid) is None:
-        pytest.skip(scorer.PENDING)
+        missing_truth(sid)
     if sid in KNOWN_RED and not RUN_ALL:
         pytest.skip(f"known red, trace {sid}: " + KNOWN_RED[sid])
     r = pipeline.evaluate(sid, str(tmp_path))
@@ -22,5 +24,5 @@ def test_trace(sid, tmp_path):
     assert not failed, failed
 
 
-def test_fifteen_scenarios():
-    assert len(SCENARIOS) == 15 and all(s.startswith("S") for s in SCENARIOS)
+def test_every_scenario_has_an_answer_file_folder():
+    assert SCENARIOS and all(s.startswith("S") and os.path.isdir(truth_path(s)) for s in SCENARIOS)

@@ -16,6 +16,8 @@ def load(repo, module):
     try:
         deps = {}
         for dep in ("messages", "access"):
+            if not os.path.exists(os.path.join(root, dep + ".py")):
+                continue                      # cards ships messages only
             spec = importlib.util.spec_from_file_location(dep, os.path.join(root, dep + ".py"))
             m = importlib.util.module_from_spec(spec)
             sys.modules[dep] = m
@@ -40,3 +42,8 @@ def forms():
 
 def orders():
     return load("orders", "orders")
+
+
+def cards():
+    """cards, read-only: the harness calls its load and grant_state; it never writes a card."""
+    return load("cards", "cards")

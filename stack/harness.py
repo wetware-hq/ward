@@ -3,12 +3,33 @@ check or export. Actors (people and agents) get a Handle that exposes observe an
 Every call, accepted or refused, is written to the trace. No model is called anywhere."""
 import datetime, hashlib, json, os, random, re
 from . import loader, locales
+import tomllib as _toml
+# person id -> cards grant id, per scenario (data: cases/scenario_data.toml [person_grants.*])
+PERSON_GRANTS = {k: v for d in _toml.load(open(os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+                 "cases", "scenario_data.toml"), "rb")).get("person_grants", {}).values() for k, v in d.items()}
 
 SYNTH_ID = re.compile(r"SYNTH-[A-Za-z0-9-]+")
 COUNTED = "call"          # trace kind of an actor call
 COUNTED_OPS = {"open", "check", "export", "export_refused", "replay", "record_result"}   # harness ops that count (truth: "harness: reset/check/...")
 AGENT_ROLES = ("patient_agent", "clinician_agent")
 CLINICIAN_ROLES = ("clinician",)          # who may still act in a blocked episode
+# job ids that are a trend review (data: cases/scenario_data.toml [claims] trend_review_jobs)
+TREND_REVIEW_JOBS = frozenset(_toml.load(open(os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+                              "cases", "scenario_data.toml"), "rb")).get("claims", {}).get("trend_review_jobs", []))
+PATIENT_SIDE = ("patient", "patient_agent", "guardian")   # every patient-side reader: the patient, grant holders, card agents
+SPECIALTY_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "packs", "specialty")
+
+
+def held_kinds(directory=None):
+    """Result kinds held for discussion: specialty pack data only (packs/specialty/*.toml, held_result_kinds)."""
+    import tomllib
+    d = directory or SPECIALTY_DIR
+    out = set()
+    for f in sorted(os.listdir(d)) if os.path.isdir(d) else []:
+        if f.endswith(".toml"):
+            with open(os.path.join(d, f), "rb") as fh:
+                out |= set(tomllib.load(fh).get("held_result_kinds", []))
+    return out
 
 
 class Blocked(Exception):
@@ -67,7 +88,10 @@ class Harness:
         self.clock = datetime.datetime.fromisoformat(start)      # fixture clock: never moved by the seed
         self.order_seed, self.independent = None, {}
         self.trace, self.episodes, self.records, self.artifacts = [], {}, {}, []
+        self.person_grants = {}
+        self.patient_cards = {}      # patient -> card a clinician read for this episode (cards grant_state source)
         self.leaks, self.now, self._adv = [], None, False
+        self.held = {}                      # record id -> {"patient", "open"}: results held for discussion
         self._emit("meta", scenario=scenario_id, seed=seed, start=self.clock.isoformat(timespec="minutes"),
                    pack=pack, language=language)
 
@@ -142,6 +166,46 @@ class Harness:
     def blocked(self, episode_id):
         return list(self.episodes[episode_id].blocks)
 
+    def cards_grant(self, h, episode_id, card_path, person):
+        """A clinician records a person's access from the record: the person's cards grant (scenario data maps person
+        id -> grant id) must be current by cards' own grant_state at scenario time, on the card for this episode.
+        Counted as one 'grant' step. Nothing is written to the card."""
+        cards = loader.cards()
+        rec = dict(actor=h.actor, role=h.role, discipline=h.discipline, patient=h.patient, episode=episode_id,
+                   method="cards_grant", args=[{"type": "grant", "person": person}])
+        gid = PERSON_GRANTS.get(person)
+        refuse = {"accepted": False, "reason": self._line("RF-NOT-YOURS"), "by": "harness"}
+        if h.role not in CLINICIAN_ROLES or gid is None:
+            return self._out(h, rec, refuse)
+        card = cards.load(open(card_path, encoding="utf-8").read())
+        if card["header"]["episode_id"] == episode_id:
+            self.patient_cards[h.patient] = card
+        g = card["grants"].get(gid) or {}
+        if card["header"]["episode_id"] != episode_id or not g.get("rel") or \
+                cards.grant_state(card, gid, self.clock.date().isoformat()) != "current":
+            return self._out(h, rec, refuse)
+        self.person_grants[(h.patient, person)] = {"card": card, "grant_id": gid, "rel": g["rel"]}
+        return self._out(h, rec, {"accepted": True, "rel": g["rel"]})
+
+    def _person_access(self, h):
+        """A person acting for a patient (guardian): (state, end date) from cards' grant_state on the scenario clock,
+        read live on every call. Never the box clock, never a role name on the request."""
+        pg = self.person_grants.get((h.patient, h.actor))
+        card = pg["card"] if pg else self.patient_cards.get(h.patient)
+        gid = pg["grant_id"] if pg else PERSON_GRANTS.get(h.actor)
+        if card is None or gid not in card["grants"] or not card["grants"][gid].get("rel"):
+            return "none", None
+        now = self.clock.date().isoformat()
+        st = loader.cards().grant_state(card, gid, now)
+        ends = [e["at"] for e in card["grant_events"] if e["grant_id"] == gid and e["event"] == st and e["at"] <= now]
+        return st, (ends[-1] if ends else None)
+
+    @staticmethod
+    def _line_or_unsigned(line_id):
+        """Signed text by id, or no text at all while the row is unsigned (never invented)."""
+        m = loader.forms()._deps["messages"]
+        return m.msg(line_id) if line_id in m.LINES else ""
+
     def session(self, actor, role, patient, discipline=None, scope=()):
         self._emit("harness", op="session", actor=actor, role=role, patient=patient, discipline=discipline,
                    scope=list(scope))
@@ -154,7 +218,7 @@ class Harness:
         return self._emit("record", actor=actor, record=record_id, patient=patient, field=field, text=text,
                           ts=self.tick(0))
 
-    def record_result(self, actor, record_id, patient, label, t, value, unit, role="clinician"):
+    def record_result(self, actor, record_id, patient, label, t, value, unit, role="clinician", kind=None):
         """Harness call that records a lab result (counted). It reaches a figure only once an orders tick cites
         its record id as evidence. In a blocked episode only a clinician may record (interpreter used)."""
         blocks = [b for ep in self.episodes.values() if ep.patient == patient for b in ep.blocks]
@@ -170,9 +234,107 @@ class Harness:
             rec["note"] = notes.scripted_note(dict(rec, kind=COUNTED))
             self._emit(COUNTED, **rec)
             return r
-        self.records[record_id] = dict(actor=actor, patient=patient, field="result", text=f"{label}|{t}|{value}|{unit}")
-        return self._emit("harness", op="record_result", actor=actor, record=record_id, patient=patient,
-                          label=label, t=t, value=value, unit=unit)
+        self.records[record_id] = dict(actor=actor, patient=patient, field="result", text=f"{label}|{t}|{value}|{unit}",
+                                       value=value)
+        rec = self._emit("harness", op="record_result", actor=actor, record=record_id, patient=patient,
+                         label=label, t=t, value=value, unit=unit, **({"result_kind": kind} if kind else {}))
+        if kind is not None and kind in held_kinds():
+            self._hold(record_id, patient)
+        return rec
+
+    # ---- held-result gate (one generic gate for every patient-side view) ----
+    def _hold(self, record_id, patient):
+        self.held[record_id] = {"patient": patient, "open": True}
+        self._emit("harness", op="clinician_queue", record=record_id, line_id="CQ-RESULT-TO-DISCUSS",
+                   text=self._line_fill("CQ-RESULT-TO-DISCUSS", event_id=record_id))
+
+    def held_open(self, patient):
+        return sorted(r for r, x in self.held.items() if x["open"] and x["patient"] == patient)
+
+    def _close_held(self, h, record_id):
+        """The existing queue-close call (step close_sameday) closes CQ-RESULT-TO-DISCUSS; only a clinician
+        acting in person may. Anyone else is refused with RF-RESULT-HELD and nothing changes."""
+        if h.role not in CLINICIAN_ROLES:
+            return {"accepted": False, "by": "harness", "line_id": "RF-RESULT-HELD", "reason": self._line("RF-RESULT-HELD")}
+        self.held[record_id]["open"] = False
+        self._emit("harness", op="clinician_queue_closed", record=record_id, line_id="CQ-RESULT-TO-DISCUSS", actor=h.actor)
+        # the clinician named in CL-CLOSED is the logged-in session, never a name sent in the request
+        return {"accepted": True, "closed": record_id, "queue": "CQ-RESULT-TO-DISCUSS", "clinician": h.actor}
+
+    def _held_strings(self, patient):
+        out = []
+        for rid in self.held_open(patient):
+            r = self.records.get(rid, {})
+            out += [rid, r.get("text", "")] + ([str(r["value"])] if str(r.get("value", "")).strip() else [])
+        return [x for x in out if x]
+
+    def declined_sensitive(self, patient):
+        """(question ids, question texts, question numbers) of sensitive questions the patient declined (last event a decline)."""
+        ids, texts, nums = set(), set(), set()
+        for ep in self.episodes.values():
+            if ep.patient != patient or ep.kind != "forms":
+                continue
+            refs = self.sensitive_refs(ep.episode_id)
+            last = {}
+            for e in ep.log:
+                if e.get("type") in ("answer", "decline"):
+                    last[e["question_id"]] = e["type"]
+            env = self._replayed(ep)
+            for q, t in last.items():
+                if t == "decline" and q in refs:
+                    ids.add(q); texts.add(env.q[q]["text"]); nums.add(list(env.q).index(q) + 1)
+        return ids, texts, nums
+
+    def gate_grant_holder(self, patient, obj):
+        """Grant holders and card agents see nothing derived from a declined sensitive question: no key, line,
+        count or marker (the before-procedure line included)."""
+        ids, texts, nums = self.declined_sensitive(patient)
+        if not ids:
+            return obj
+        num = re.compile(r"\bquestion (?:%s)\b" % "|".join(str(n) for n in sorted(nums)))
+        heads = [h for h in (locales.line(l).split("[")[0] for l in ("PV-BEFORE-PROC", "PV-DECLINED")) if h]
+        bad = list(ids) + [t.rstrip("?") for t in texts]
+
+        def hit(v):
+            return isinstance(v, str) and (any(b in v for b in bad) or any(v.startswith(x) for x in heads)
+                                           or num.search(v) is not None)
+
+        def walk(v):
+            if isinstance(v, dict):
+                return {k: walk(x) for k, x in v.items() if k not in ids and not hit(x)}
+            if isinstance(v, list):
+                return [walk(x) for x in v if not hit(x)]
+            return v
+        return walk(obj)
+
+    def gate_view(self, patient, obj):
+        """Patient-side copy of obj: every string naming a held, undiscussed result (its id, record text or raw
+        value) becomes PV-RESULT-WAITING. Clinician views never pass through here."""
+        bad = self._held_strings(patient)
+        if not bad:
+            return obj
+        wait = self._line("PV-RESULT-WAITING")
+
+        def walk(v):
+            if isinstance(v, str):
+                return wait if any(b in v for b in bad) else v
+            if isinstance(v, dict):
+                return {k: walk(x) for k, x in v.items()}
+            if isinstance(v, list):
+                return [walk(x) for x in v]
+            return v
+        out = walk(obj)
+        return dict(out, result_waiting=wait) if isinstance(out, dict) else out
+
+    def visible_records(self, patient, patient_side):
+        recs = {k: v for k, v in self.records.items() if v["patient"] == patient}
+        if patient_side:
+            recs = {k: v for k, v in recs.items() if k not in self.held_open(patient)}
+        return recs
+
+    def _line_fill(self, line_id, **f):
+        m = loader.forms()._deps["messages"]
+        return m.msg(line_id, **f) if line_id in m.LINES else "ERR:" + line_id.lower()
 
     def note(self, actor, record_id, patient, field, text, line):
         """A clinician note line from the scenario's synthetic notes file, logged before it can reach a letter."""
@@ -200,7 +362,7 @@ class Harness:
         self._emit("harness", op="check", episode=episode_id, result=c, **({"audit": True} if audit else {}))
         return c
 
-    def export_bundle(self, episode_id, audit=False):
+    def export_bundle(self, episode_id, audit=False, patient_side=False):
         """One harness export (counted) plus what the adapter needs to stay a pure transform: the case items,
         the records cited by ticks, which events were recorded with an interpreter, the pack and the language."""
         ep = self.episodes[episode_id]
@@ -213,8 +375,9 @@ class Harness:
         interp = sorted(i for r in self.calls() if r.get("episode") == episode_id and r.get("interpreter_used")
                         for i in r.get("events", []))
         return {"episode_id": episode_id, "kind": ep.kind, "patient": ep.patient, "blocks": blocked, "export": x,
-                "items": items, "records": {k: v for k, v in self.records.items() if v["patient"] == ep.patient},
+                "items": items, "records": self.visible_records(ep.patient, patient_side),
                 "interpreter_events": interp, "pack": self.pack, "language": self.language,
+                "held": self.held_open(ep.patient) if patient_side else [],
                 "case": ep.case if isinstance(ep.case, str) else None}
 
     def peek(self, episode_id):
@@ -222,6 +385,15 @@ class Harness:
         ep = self.episodes[episode_id]
         e = self._replayed(ep)
         return e.check() if ep.kind == "forms" else e.check(self.now)
+
+    @property
+    def question_texts(self):
+        """{question id: plain wording} for every forms episode (scorer read; nothing written to the trace)."""
+        out = {}
+        for ep in self.episodes.values():
+            if ep.kind == "forms":
+                out.update({i: q["text"] for i, q in self._replayed(ep).q.items()})
+        return out
 
     def patient_view(self, episode_id):
         ep = self.episodes[episode_id]
@@ -241,7 +413,7 @@ class Harness:
             keep = walk(full) or {}
             self._emit("harness", op="patient_view", episode=episode_id, result=keep, hidden=list(ep.blocks))
             return keep
-        v = self._replayed(ep).patient_view()
+        v = self.gate_view(ep.patient, self._replayed(ep).patient_view())
         self._emit("harness", op="patient_view", episode=episode_id, result=v)
         return v
 
@@ -285,9 +457,35 @@ class Harness:
         rec = dict(actor=h.actor, role=h.role, discipline=h.discipline, patient=h.patient, episode=episode_id,
                    method=method, args=args)
         rec["_note"] = note
+        if ep is not None and h.role == "guardian":
+            st, end = self._person_access(h)
+            if st in ("revoked", "expired"):      # a grant holder's grant ended: RF-GRANT-ENDED (pending signing)
+                return self._out(h, rec, {"accepted": False, "by": "harness", "line_id": "RF-GRANT-ENDED", "ended": end,
+                                          "reason": self._line_or_unsigned("RF-GRANT-ENDED")})
+            if st != "current":
+                return self._out(h, rec, {"accepted": False, "reason": self._line("RF-NOT-YOURS"), "by": "harness"})
         if ep is None or ep.patient != h.patient:
             # harness binding: a handle reaches only its own patient's episodes, same line either way
             return self._out(h, rec, {"accepted": False, "reason": self._line("RF-NOT-YOURS"), "by": "harness"})
+        t0 = args[0].get("type") if method == "step" and args and isinstance(args[0], dict) else None
+        if method == "observe" and args and isinstance(args[0], dict) and args[0].get("record") in self.held:
+            rid = args[0]["record"]           # a request for one held result's raw value
+            if self.held[rid]["open"] and h.role in PATIENT_SIDE:
+                return self._out(h, rec, {"accepted": False, "by": "harness", "line_id": "PV-RESULT-WAITING",
+                                          "reason": self._line("PV-RESULT-WAITING")})
+            return self._out(h, rec, {"accepted": True, "record": rid, "value": (self.records.get(rid) or {}).get("text")})
+        if t0 == "answer" and h.role == "patient_agent" and ep.kind == "forms" and self.peek(episode_id).get("submissions"):
+            cur = self.peek(episode_id).get("answers", {})
+            q = args[0].get("question_id")
+            if q in cur and cur[q] != args[0].get("value"):   # resend unchanged: fine; any change: refused
+                return self._out(h, rec, {"accepted": False, "by": "harness", "line_id": "RF-AGENT-ANSWER-CHANGED",
+                                          "reason": self._line_or_unsigned("RF-AGENT-ANSWER-CHANGED")})
+        if t0 == "close_sameday" and args[0].get("record") in self.held:
+            return self._out(h, rec, self._close_held(h, args[0]["record"]))
+        if t0 == "submit" and self.held_open(ep.patient):
+            # CQ-RESULT-TO-DISCUSS open: the episode cannot pass until a clinician records the discussion
+            return self._out(h, rec, {"accepted": False, "by": "harness", "line_id": "RF-RESULT-HELD",
+                                      "reason": self._line("RF-RESULT-HELD")})
         if method == "step" and h.role in AGENT_ROLES and isinstance(args[0], dict) and args[0].get("type") in ("grant", "revoke"):
             return self._out(h, rec, {"accepted": False, "by": "harness", "line_id": "RF-AGENT-REVOKE",
                                       "reason": locales.line("RF-AGENT-REVOKE")})   # PENDING WORDING
@@ -307,7 +505,12 @@ class Harness:
             t = args[0].get("type") if method == "step" and isinstance(args[0], dict) else None
             if t and "interpreter" in getattr(mod, "OPTIONAL", {}).get(t, set()):
                 args = [dict(args[0], interpreter=True)]     # middleware field, where it exists (round 8)
-        env = self._replayed(ep, h.actor, h.role, h.discipline, h.scope)
+        try:
+            env = self._replayed(ep, h.actor, h.role, h.discipline, h.scope)
+        except Exception as e:               # the env refuses the session itself (e.g. an unregistered role)
+            if type(e).__name__ != "Invalid":
+                raise
+            return self._out(h, rec, {"accepted": False, "reason": str(e), "by": "middleware"})
         before = len(env.log)
         if method == "step" and isinstance(args[0], dict) and args[0].get("type") == "review":
             refs0 = self.sensitive_refs(episode_id)      # a review that closes a sensitive item's entry is sensitive
@@ -340,6 +543,10 @@ class Harness:
             ep.log.extend(new)
             rec["events"] = [len(ep.log) - len(new) + i for i in range(len(new))]
             rec["queue_after"] = list(self.peek(episode_id).get("clinician_queue", []) or [])   # env record, for the scorer
+            if t0 == "tick" and h.role in CLINICIAN_ROLES and args[0].get("id") in TREND_REVIEW_JOBS:
+                rec["trend_closed"] = True        # Physician 12:30: a clinician closing the trend review, every scenario
+                if not self.peek(episode_id).get("open"):
+                    rec["all_done"] = "ST-DONE"   # and it finished every job: env result closed:ST-DONE (S14)   # in person, closes the last open job: CL-TREND-CLOSED (pending signing)
             if can_escalate and (self._alerts(episode_id) - q0 or self._would_escalate(ep, env, new)):
                 rec["escalated"] = True
             out = self._out(h, rec, r)
@@ -402,6 +609,10 @@ class Harness:
 
     def _out(self, h, rec, r):
         r = _jsonable(r)
+        if h.role in PATIENT_SIDE:
+            r = self.gate_view(h.patient, r)
+        if h.role in PATIENT_SIDE and h.role != "patient":
+            r = self.gate_grant_holder(h.patient, r)
         accepted = r.get("accepted", True) if isinstance(r, dict) else True
         seen = set(SYNTH_ID.findall(json.dumps(r)))
         own = {h.patient} | {e for e, ep in self.episodes.items() if ep.patient == h.patient}
@@ -410,6 +621,16 @@ class Harness:
             self.leaks.append(dict(actor=h.actor, ids=foreign))
         if self._adv:
             rec["adversarial"], self._adv = True, False
+        a0 = (rec.get("args") or [{}])[0]
+        if accepted and isinstance(a0, dict) and a0.get("type") == "submit":
+            kinds = [((t.get("args") or [{}])[0] or {}).get("type") for t in self.trace
+                     if t.get("kind") == COUNTED and t.get("accepted") and t.get("episode") == rec.get("episode")
+                     and isinstance((t.get("args") or [{}])[0], dict)]
+            last = max((n for n, k in enumerate(kinds) if k == "submit"), default=None)
+            if last is not None and "review" in kinds[last:]:
+                rec["resubmit"] = True   # a submit after a clinician review of a failed form (ruling 11:52)
+                # the resubmit re-runs the full check over every answer, so it touches any sensitive item the form holds
+                rec["_closed_sensitive"] = rec.get("_closed_sensitive") or bool(self.sensitive_refs(rec["episode"]))
         from . import notes
         note = rec.pop("_note", None)
         if isinstance(note, str) or note is None:

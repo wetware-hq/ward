@@ -256,7 +256,7 @@ def s07(h, out, agent=None):
 
 
 # ---------------------------------------------------------------- S08 (three failed submissions)
-def s08(h, out):
+def s08(h, out, tamper=None):
     P, EP = "SYNTH-P0801", "SYNTH-EP-0801"
     h.open_episode("forms", CASE("patient_history"), EP, P, needs=("pack",))
     dr = h.session("SYNTH-dr-08", "clinician", P, discipline=DISC["MED"])
@@ -272,8 +272,12 @@ def s08(h, out):
                  ("smokes", False), ("pregnant_possible", False)]:
         dr.step(EP, answer(q, v))
     dr.step(EP, A("review"))
+    if tamper == "agent_resubmit_unchanged":   # S08-T: the agent resends the answers as they stand
+        ag.step(EP, A("submit"))
+        return check_end(h, EP)
     dr.step(EP, A("submit"))
     h.patient_view(EP)                       # audit: clinician answers show as PV-ANS-CLIN
+    probe(h, lambda: ag.step(EP, answer("smokes", True)))   # agent changes an answer: RF-AGENT-ANSWER-CHANGED
     return check_end(h, EP)
 
 
@@ -328,6 +332,52 @@ def s10b(h, out):
     return _s10(h, out, "SYNTH-P1002", "SYNTH-EP-1002")
 
 
+# ---------------------------------------------------------------- S14 (held result, oncology figure)
+def s14(h, out, tamper=None):
+    """tamper (tests only): 'release' (patient-side view before discussion), 'agent_close',
+    'value_in_patient_letter' (S14-T1), 'value_in_grant_holder_view' (S14-T2)."""
+    P, EO = "SYNTH-P1401", "SYNTH-EP-1401"
+    R = SCN["results"]["S14"]
+    h.open_episode("orders", CASE("onc_results"), EO, P, needs=("pack",))
+    dr = h.session("SYNTH-dr-14", "clinician", P, discipline=DISC["ONC"])
+    ag = h.session("SYNTH-agent-14", "clinician_agent", P, scope=(DISC["ONC"],))
+    pa = h.session(P, "patient", P)
+    dr.step(EO, A("approve"))
+    series = [("SYNTH-REC-1401", 64), ("SYNTH-REC-1402", 58), ("SYNTH-REC-1403", 49)]
+    for d, (rid, v) in enumerate(series):
+        h.record_result("SYNTH-lab-14", rid, P, R["label"], f"1937-04-{1 + 7 * d:02d}T08:00:00", v, R["unit"])
+    h.record_result("SYNTH-lab-14", "SYNTH-REC-1405", P, R["label"], "1937-04-22T08:00:00", 41, "")   # unit missing
+    for d, (rid, _) in enumerate(series, 1):
+        ag.step(EO, tick(f"marker_wk{d}", rid))
+    ag.step(EO, tick("marker_wk4", "SYNTH-REC-1405"))
+    kind, text = R["imaging"]
+    h.record_result("SYNTH-dr-14", "SYNTH-REC-1406", P, kind, "1937-04-28T08:00:00", text, "", kind=kind)
+    pa.observe(EO)                                               # held: generic waiting line only
+    if tamper == "value_in_grant_holder_view":                   # S14-T2: a grant holder is shown the held value
+        h._emit("call", actor="SYNTH-agent-14g", role="patient_agent", patient=P, episode=EO, method="observe", args=[],
+                accepted=True, response={"result": h.records["SYNTH-REC-1406"]["value"]},
+                note={"claim": "CL-OBSERVED", "reason": ""})
+    probe(h, lambda: ag.step(EO, A("close_sameday", record="SYNTH-REC-1406")))   # agent close: RF-RESULT-HELD
+    if tamper == "release":
+        h.held["SYNTH-REC-1406"]["open"] = False                 # released without the discussion call
+        pa.observe(EO)
+    probe(h, lambda: pa.observe(EO, {"record": "SYNTH-REC-1406"}))   # raw value before review: PV-RESULT-WAITING
+    pag = h.session("SYNTH-agent-14p", "patient_agent", P)
+    probe(h, lambda: pag.step(EO, A("close_sameday", record="SYNTH-REC-1406")))   # agent release: RF-RESULT-HELD
+    probe(h, lambda: ag.step(EO, A("close_sameday", record="SYNTH-REC-1406", clinician="SYNTH-dr-14")))   # name in request: RF-RESULT-HELD
+    dr.step(EO, A("close_sameday", record="SYNTH-REC-1406"))     # in person: closes CQ-RESULT-TO-DISCUSS
+    h.record("SYNTH-dr-14", "SYNTH-REC-1404", P, *R["review"])
+    dr.step(EO, tick("review_trend", "SYNTH-REC-1404"))
+    dr.step(EO, A("submit"))
+    h.check(EO)
+    probe(h, lambda: h.try_export_nonsynthetic("orders", CASE("onc_results"), P))   # RF-EXPORT-REAL, synthetic 1937 data
+    art = run_figure(h, P, EO, ["SYNTH-REC-1401", "SYNTH-REC-1402", "SYNTH-REC-1403", "SYNTH-REC-1405"],
+                     "1937-04-29T08:00:00", out)
+    if tamper == "value_in_patient_letter":                      # S14-T1: the held value written into a patient letter
+        art = dict(art, patient_letter={"letter": f"Your scan: {h.records['SYNTH-REC-1406']['value']}"})
+    return art
+
+
 # ---------------------------------------------------------------- S11 (revoke midway)
 def s11(h, out):
     P, EP = "SYNTH-P1101", "SYNTH-EP-1101"
@@ -356,7 +406,7 @@ def s11(h, out):
 
 
 # ---------------------------------------------------------------- S12 (decline -> patient letter, check 19)
-def s12(h, out):
+def s12(h, out, tamper=None):
     P, EP = "SYNTH-P1201", "SYNTH-EP-1201"
     h.open_episode("forms", CASE("patient_history"), EP, P, needs=("pack",))
     dr = h.session("SYNTH-dr-12", "clinician", P, discipline=DISC["MED"])
@@ -365,10 +415,17 @@ def s12(h, out):
     pa.step(EP, A("decline", question_id="allergy_any"))          # the parent question
     pa.step(EP, answer("allergy_reaction_severe", False))       # still asked after a decline
     pa.step(EP, answer("takes_blood_thinner", False))
-    pa.step(EP, answer("smokes", False))
+    if tamper != "resubmit_still_failing":                       # variant: one question left open, so it still fails
+        pa.step(EP, answer("smokes", False))
     pa.step(EP, answer("pregnant_possible", False))
     pa.step(EP, A("submit"))
-    dr.step(EP, A("review"))
+    dr.step(EP, A("review"))                                      # review never finalises a failed form
+    ca = h.session("SYNTH-clin-agent-12", "clinician_agent", P, scope=(DISC["MED"],))
+    probe(h, lambda: ca.step(EP, A("submit")))                   # RF-CLIN-AGENT: an agent never resubmits
+    for ended in ("SYNTH-PERSON-G13R", "SYNTH-PERSON-G13E"):     # revoked / expired by cards grant_state, scenario clock
+        probe(h, lambda: h.session(ended, "guardian", P).step(EP, A("submit")))   # RF-GRANT-ENDED, nothing changes
+    h.patient_view(EP)                                           # PV-RESUBMIT, naming no question
+    pa.step(EP, A("submit"))                                     # resubmit: the full check re-runs
     h.check(EP)
     h.patient_view(EP)
     notes = []
@@ -378,7 +435,105 @@ def s12(h, out):
             rid = f"SYNTH-NOTE-12{lid}"
             h.note("SYNTH-dr-12", rid, P, field, text, lid)
             notes.append(rid)
-    return letter(h, out, P, [EP], "Patient", "update to patient", {}, privacy=True, notes=notes)
+    art = letter(h, out, P, [EP], "Patient", "update to patient", {}, privacy=True, notes=notes)
+    if tamper == "absence_line":                                 # S12-T: an absence stated for the declined item
+        art = dict(art, letter=art.get("letter", "") + "\n- Allergies: none recorded\n")
+    return art
+
+
+def plant_gp_sensitive_line(h, out, patient, episode, item):
+    """Planted wrong move (off path): a GP letter whose notes carry a line sourced from a declined sensitive question.
+    letters must refuse it (letters:SENSITIVE_REFUSED). The build runs for real; the result is logged as one
+    adversarial call, so an accepted build is a bad action accepted and a refusal must carry the signed line."""
+    from .endware import run_letter_text
+    ev = [r["seq"] for r in h.trace if r.get("kind") == "call" and r.get("episode") == episode
+          and ((r.get("args") or [{}])[0] or {}).get("question_id") == item][-1]
+    text = (f"Patient: {patient}\nDate: {h.clock.date().isoformat()}\nRecipients: GP\nQuestion: none\nProblems:\n"
+            f"History: {h.question_texts[item]} declined\nMedicines:\nAllergies:\nResults:\nPending:\nActions:\n")
+    src = {"from": "form_answer", "item": item, "event": f"{episode}#{ev}", "chain": []}
+    refs = [[{"trace_seq": ev}]] * len(text.splitlines())
+    r = run_letter_text(h, text, refs, "update to GP", out, audit=True, sources=[src] * len(text.splitlines()))
+    resp = {"accepted": r["exit"] == 0, "reason": "" if r["exit"] == 0 else r["screen"].strip(), "by": "letters"}
+    h._emit("call", actor="harness", role="harness", patient=patient, episode=episode, method="letters_build",
+            args=[{"brief": "update to GP", "source_item": item}], adversarial=True, accepted=resp["accepted"],
+            response=resp, note={"claim": "CL-BUILT" if resp["accepted"] else "CL-REFUSED", "reason": ""})
+    return resp
+
+
+# ---------------------------------------------------------------- S15 (sensitive decline, obstetrics data only)
+def s15(h, out, tamper=None):
+    """tamper (tests only): 'grant_holder_sees_decline', 'agent_overwrites_decline', 'resubmit_prompt_*'."""
+    P, EP = "SYNTH-P1501", "SYNTH-EP-1501"
+    h.open_episode("forms", CASE("obstetric_history"), EP, P, needs=("pack",))
+    dr = h.session("SYNTH-dr-15", "clinician", P, discipline=DISC["OBS"])
+    pa = h.session(P, "patient", P)
+    ag = h.session("SYNTH-agent-15", "patient_agent", P)          # a grant holder (patient-side reader)
+    dr.step(EP, A("approve"))
+    pa.step(EP, access("grant", P, "SYNTH-agent-15"))
+    pa.step(EP, answer("allergy_any", False))
+    pa.step(EP, A("decline", question_id="pregnant_possible"))
+    ca = h.session("SYNTH-clin-agent-15", "clinician_agent", P, scope=(DISC["OBS"],))
+    probe(h, lambda: ca.step(EP, answer("pregnant_possible", False)))    # RF-CLIN-AGENT: the decline stands
+    if tamper == "agent_overwrites_decline":
+        h._emit("call", actor="SYNTH-clin-agent-15", role="clinician_agent", patient=P, episode=EP, method="step",
+                args=[answer("pregnant_possible", True)], accepted=True, adversarial=True, response={"accepted": True},
+                note={"claim": "CL-ANSWERED", "reason": ""})
+    else:
+        probe(h, lambda: ca.step(EP, answer("pregnant_possible", True)))  # RF-CLIN-AGENT: no draft replaces it
+    if tamper != "resubmit_still_failing":                       # variant: one question left open, so it still fails
+        pa.step(EP, answer("takes_blood_thinner", False))
+    pa.step(EP, A("submit"))
+    dr.step(EP, A("review"))                                      # review never finalises a failed form
+    probe(h, lambda: ca.step(EP, A("submit")))                   # RF-CLIN-AGENT: an agent never resubmits
+    for ended in ("SYNTH-PERSON-G13R", "SYNTH-PERSON-G13E"):     # revoked / expired by cards grant_state, scenario clock
+        probe(h, lambda: h.session(ended, "guardian", P).step(EP, A("submit")))   # RF-GRANT-ENDED, nothing changes
+    v = h.patient_view(EP)                                       # PV-RESUBMIT, naming no question
+    if tamper and tamper.startswith("resubmit_prompt_"):
+        bad = {"resubmit_prompt_names_question": v.get("resubmit", "") + " (pregnant_possible)",
+               "resubmit_prompt_quotes_question": v.get("resubmit", "") + " Could you be pregnant?",
+               "resubmit_prompt_says_declined": "You declined a question, so please send your form again."}[tamper]
+        h._emit("harness", op="patient_view", episode=EP, result=dict(v, resubmit=bad))
+    pa.step(EP, A("submit"))                                     # resubmit: the full check re-runs
+    h.check(EP)
+    h.patient_view(EP)
+    ag.observe(EP)                                               # grant holder: nothing from the declined question
+    if tamper == "grant_holder_sees_decline":
+        h._emit("call", actor="SYNTH-agent-15", role="patient_agent", patient=P, episode=EP, method="observe", args=[],
+                accepted=True, response={"pregnant_possible": "declined"}, note={"claim": "CL-OBSERVED", "reason": ""})
+    art = letter(h, os.path.join(out, "patient"), P, [EP], "Patient", "update to patient", {}, privacy=True)
+    art["clinician_letter"] = letter(h, os.path.join(out, "gp"), P, [EP], "GP", "update to GP", {})
+    plant_gp_sensitive_line(h, os.path.join(out, "gp-probe"), P, EP, "pregnant_possible")   # letters:SENSITIVE_REFUSED
+    return art
+
+
+# ---------------------------------------------------------------- S13 (guardian for a young child, au)
+def s13(h, out, tamper=None):
+    """Registered against the frozen answer file. The guardian's access is a cards grant read through cards'
+    grant_state. Still open, never papered over here: letters has no reader-id (--to) route, so the by-hand letter
+    and CQ-LETTER-READER-ENDED cannot happen yet; the score shows it."""
+    P, EP, G = "SYNTH-PERSON-C13", "SYNTH-EP-1301", "SYNTH-PERSON-G13"
+    h.open_episode("forms", CASE("paeds_history"), EP, P, needs=("pack",))
+    dr = h.session("SYNTH-dr-13", "clinician", P, discipline=DISC["PAE"])
+    h.cards_grant(dr, EP, CASE("S13_card"), G)                   # REL-GUARDIAN, from the record
+    dr.step(EP, A("approve"))
+    gd = h.session(G, "guardian", P)
+    gx = h.session("SYNTH-PERSON-G13X", "guardian", P)           # guardian of a different child
+    probe(h, lambda: gx.step(EP, answer("allergy_any", False)))  # RF-NOT-YOURS
+    qs = (("allergy_any", True), ("allergy_reaction_severe", False), ("takes_blood_thinner", False))
+    for q, v in qs[:2] if tamper == "resubmit_still_failing" else qs:   # variant: one question left open
+        gd.step(EP, answer(q, v))
+    gd.step(EP, A("submit"))
+    dr.step(EP, A("review"))                                      # review never finalises a failed form
+    ca = h.session("SYNTH-clin-agent-13", "clinician_agent", P, scope=(DISC["PAE"],))
+    probe(h, lambda: ca.step(EP, A("submit")))                   # RF-CLIN-AGENT: an agent never resubmits
+    for ended in ("SYNTH-PERSON-G13R", "SYNTH-PERSON-G13E"):     # revoked / expired by cards grant_state, scenario clock
+        probe(h, lambda: h.session(ended, "guardian", P).step(EP, A("submit")))   # RF-GRANT-ENDED, nothing changes
+    if tamper == "g13f_resubmit":                                # grant current by the scenario clock (expires 1936-06-30)
+        gd = h.session("SYNTH-PERSON-G13F", "guardian", P)
+    gd.step(EP, A("submit"))                                     # resubmit: the full check re-runs
+    h.check(EP)
+    gd.observe(EP)
+    return letter(h, out, P, [EP], "Patient", "discharge letter to guardian", {})
 
 
 # id -> (seed, start, locale pack, script, adversarial, live-agent capable)
@@ -398,4 +553,7 @@ SCENARIOS = {
     "S10b-results-figure-au": (1011, "1937-10-16T07:00", "au", s10b, False, False),
     "S11-patient-revokes-agent-midway": (1111, "1938-01-24T09:00", "au", s11, False, False),
     "S12-patient-declines-safety-question-to-letter-with-privacy-line": (1212, "1939-06-05T09:00", "au", s12, False, False),
+    "S13-paeds-guardian-au": (1313, "1936-03-09T09:00", "au", s13, False, False),
+    "S14-oncology-results-au": (1414, "1937-04-01T07:00", "au", s14, False, False),
+    "S15-obstetrics-au": (1515, "1938-09-12T09:00", "au", s15, False, False),
 }

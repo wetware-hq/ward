@@ -2,6 +2,7 @@
 'ERR:' fallback in _line can never fire."""
 import ast, pathlib
 from stack import loader
+from signed_source import signed_rows as _signed_rows
 
 SRC = pathlib.Path(__file__).resolve().parent.parent / "stack" / "harness.py"
 
@@ -17,5 +18,5 @@ def line_ids():
 
 def test_every_harness_line_id_is_signed():
     ids, dyn = line_ids()
-    lines = loader.forms()._deps["messages"].LINES
+    lines = _signed_rows()
     assert ids and dyn == [] and sorted(i for i in ids if i not in lines) == []

@@ -1,6 +1,7 @@
 """Room ruling: each tamper below must make its trace fail on its own (the untampered run passes that check)."""
 import copy, re, pytest
 from stack import runner, scorer
+from truthgate import missing_truth, truth_path
 
 S08, S05 = "S08-three-fails-escalation", "S05-mh-screen-by-patient-agent"
 
@@ -8,7 +9,7 @@ S08, S05 = "S08-three-fails-escalation", "S05-mh-screen-by-patient-agent"
 def run(sid, tmp_path):
     t = scorer.load_truth(sid)
     if t is None:
-        pytest.skip(scorer.PENDING)
+        missing_truth(sid)
     h, art = runner.run(sid, str(tmp_path), t["patient_language"])
     return t, h, art
 

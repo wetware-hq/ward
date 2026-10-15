@@ -2,6 +2,7 @@
 import os
 import pytest
 from stack import runner, scorer
+from truthgate import missing_truth, truth_path
 
 BLOCKED = ["S03-med-rec-pharmacist", "S04-allied-referral-physio", "S06a-sdm-on-behalf-eu-de", "S10-results-figure"]
 
@@ -10,7 +11,7 @@ BLOCKED = ["S03-med-rec-pharmacist", "S04-allied-referral-physio", "S06a-sdm-on-
 def test_blocked_trace_releases_no_output(sid, tmp_path):
     t = scorer.load_truth(sid)
     if t is None:
-        pytest.skip(scorer.PENDING)
+        missing_truth(sid)
     assert str(t.get("expected_outcome")).upper() == "BLOCKED_FOR_OUTPUT"
     h, art = runner.run(sid, str(tmp_path), t["patient_language"])
     assert art["tool"] == "block" and art.get("path") in (None, "")

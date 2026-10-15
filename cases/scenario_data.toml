@@ -5,6 +5,9 @@ MED = "medicine"
 NUR = "nursing"
 PHA = "pharmacy"
 PHY = "physiotherapy"
+ONC = "oncology"
+PAE = "paediatrics"
+OBS = "obstetrics"
 
 [records.S02]
 "SYNTH-REC-0001" = ["Medicines", "aspirin 100 mg daily reason: chest pain"]
@@ -29,3 +32,25 @@ review = ["review", "CRP reviewed"]
 [letters.S04]
 reader = "Physiotherapy clinic"
 brief = "referral to physiotherapy"
+
+[results.S14]
+label = "tumour marker"
+unit = "U/mL"
+imaging = ["imaging report", "SYNTH imaging report: no change"]
+review = ["review", "tumour marker results reviewed"]
+
+[persons.S13]
+child = "SYNTH-PERSON-C13"
+"SYNTH-PERSON-G13" = { relation = "REL-GUARDIAN", of = "SYNTH-PERSON-C13", granted = "1936-01-10" }
+"SYNTH-PERSON-G13R" = { relation = "REL-GUARDIAN", of = "SYNTH-PERSON-C13", granted = "1935-06-01", revoked = "1936-02-01" }
+"SYNTH-PERSON-G13X" = { relation = "REL-GUARDIAN", of = "SYNTH-PERSON-C99" }
+
+# S13: guardian person id -> the cards grant that gives that person access (read via cards grant_state)
+[person_grants.S13]
+"SYNTH-PERSON-G13" = "SYNTH-GR-1301"
+"SYNTH-PERSON-G13R" = "SYNTH-GR-1302"
+"SYNTH-PERSON-G13E" = "SYNTH-GR-1303"
+"SYNTH-PERSON-G13F" = "SYNTH-GR-1304"
+
+[claims]
+trend_review_jobs = ["review_trend"]   # Physician 12:30: closing it in person claims CL-TREND-CLOSED

@@ -8,6 +8,11 @@ EPI = "SYNTH-FAKE-EP1"
 
 # ---- locales
 def test_unknown_line_is_pending_wording():
+    import pathlib
+    from signed_source import signed_path as _signed_path
+    wdir = _signed_path().parent
+    signing = [f for f in wdir.glob("*.md") if ("SIGNED" in f.name or "SAFETY" in f.name) and "bak" not in f.name]
+    assert signing and not any("XX-NO-SUCH-LINE" in f.read_text() for f in signing)
     assert locales.line("XX-NO-SUCH-LINE") == f"{locales.PENDING_WORDING}: XX-NO-SUCH-LINE"
     assert locales.line("XX-NO-SUCH-LINE", **{"locale pack": "au"}) == f"{locales.PENDING_WORDING}: XX-NO-SUCH-LINE"
 

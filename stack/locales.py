@@ -8,7 +8,6 @@ import os, re
 
 from stack.paths import SIBLINGS as WORKSPACE
 SIGNED = os.path.join(WORKSPACE, "wording", "forms_orders_lines_SIGNED.md")
-ROUND6 = os.path.join(WORKSPACE, "wording", "forms_orders_lines_round6_DRAFT.md")
 PENDING_IDS = set()      # ids used by the stack but not yet in SIGNED; any id missing from SIGNED is PENDING WORDING
 PENDING_WORDING = "PENDING WORDING"
 # Signed decision-maker term per pack. Only au is backed by a signed source: forms RELATIONSHIP (signed).
@@ -33,11 +32,14 @@ def signed_languages():
 
 
 def _round6():
-    """Signed lines: the SIGNED table first, then the round 6 file (signed in the room)."""
+    """Signed lines, from the signed table only (no draft file is ever read)."""
     out = {}
-    for p in (ROUND6, SIGNED):
+    for p in (SIGNED,):
         try:
-            out.update(re.findall(r"^\|\s*([A-Z]{2}-[A-Z0-9-]+)\s*\|\s*(.+?)\s*\|", open(p, encoding="utf-8").read(), re.M))
+            # the line is the last cell of the row, whatever its column count (CL rows carry a status token first)
+            for lid, rest in re.findall(r"^\|\s*([A-Z]{2,}-[A-Z0-9-]+)\s*\|(.*)$", open(p, encoding="utf-8").read(), re.M):
+                cells = rest.rstrip().rstrip("|").split("|")
+                out[lid] = cells[-1].strip()
         except OSError:
             pass
     return out

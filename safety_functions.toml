@@ -6,6 +6,11 @@ line_tables = []
 [[modules]]
 path = "stack/harness.py"
 functions = [
+    "cards_grant",
+    "_person_access",
+    "_line_or_unsigned",
+    "held_kinds", "_hold", "held_open", "_close_held", "_held_strings", "gate_view", "visible_records",
+    "declined_sensitive", "gate_grant_holder", "_line_fill",
     "__init__",
     "_call",
     "_emit",
@@ -32,12 +37,16 @@ functions = [
 [[modules]]
 path = "stack/scorer.py"
 functions = [
+    "resubmit_prompt",
     "consent",
     "_slot_items",
     "_sensitive_cut",
     "_answer_line",
     "_chain_items",
     "_clin_lines_from",
+    "_held_hidden",
+    "_decline_hidden",
+    "_gp_no_source",
     "load_truth",
     "safety",
     "safety_lines",

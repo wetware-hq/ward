@@ -2,16 +2,17 @@
 Declarations are read (read-only) from the S05 answer file. Observations are fake fixtures; no trace is run."""
 import copy, os, tomllib, pytest
 from stack import scenario_tests as st, adapter, scorer
+from truthgate import missing_truth, truth_path
 
-TRUTH = __import__("os").path.join(__import__("stack.paths", fromlist=["TRUTH"]).TRUTH, "S05-mh-screen-by-patient-agent", "truth.toml")
 EP = st.EP
 
 
 @pytest.fixture(scope="module")
 def decl():
-    if not os.path.exists(TRUTH):
-        pytest.skip(scorer.PENDING)
-    return {t["id"]: t for t in tomllib.load(open(TRUTH, "rb"))["scenario_tests"]}
+    p = truth_path("S05-mh-screen-by-patient-agent", "truth.toml")
+    if not os.path.exists(p):
+        missing_truth("S05")
+    return {t["id"]: t for t in tomllib.load(open(p, "rb"))["scenario_tests"]}
 
 
 def q(template, ev=f"{EP}#3"):

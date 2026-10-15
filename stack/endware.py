@@ -33,10 +33,10 @@ def letter(h, out, patient, episodes, reader, brief, phrases=None, privacy=None,
     """One harness export (all of the letter's episodes) -> adapter facts -> notes -> one letters build.
     audit=True: a second view of the same export (not a counted call)."""
     from . import adapter
-    bundles = [h.export_bundle(e, audit=audit or n > 0) for n, e in enumerate(episodes)]
+    audience = "patient" if brief.strip().endswith("to patient") else "clinician"
+    bundles = [h.export_bundle(e, audit=audit or n > 0, patient_side=audience == "patient") for n, e in enumerate(episodes)]
     if any(bd["blocks"] for bd in bundles):
         return _blocked_artifact(h, bundles, "letters")
-    audience = "patient" if brief.strip().endswith("to patient") else "clinician"
     try:
         fs = [f for bd in bundles for f in adapter.facts(bd)]
     except adapter.AdapterRefused as e:
@@ -116,6 +116,9 @@ import json, sys, os
 sys.path.insert(0, sys.argv[1])
 import figures
 a = json.load(sys.stdin)
+from datetime import datetime
+figures.DRAWN = datetime.fromisoformat(a["drawn"]).replace(second=0, microsecond=0)   # scenario clock, never the box clock
+figures.ANCHOR.update(t=figures.DRAWN)
 try:
     d, checks = figures.build(a["text"], a["out"] + ".html", as_at=a["as_at"])
     files = sorted(os.path.join(d, f) for f in os.listdir(d))
@@ -129,13 +132,13 @@ except figures.RowsRefused as e:
 FIGURES_RUN = subprocess.run          # tests may replace this with a stub; traces use the real figures
 
 
-def run_figure(h, patient, episode_id, record_ids, as_at, outdir):
+def run_figure(h, patient, episode_id, record_ids, as_at, outdir, audience="clinician"):
     """One harness export -> adapter facts -> design CSV -> figures paste -> one figures build.
     figures reads its own columns (patient,local_label,t,value,unit,...), not the design CSV (gap), so the
     design CSV is mapped column by column; rows not named in record_ids are not charted."""
     from . import adapter
     import csv as _csv, io as _io
-    bd = h.export_bundle(episode_id)
+    bd = h.export_bundle(episode_id, patient_side=audience != "clinician")   # clinician figures show held values
     if bd["blocks"]:
         return _blocked_artifact(h, [bd], "figures")
     try:
@@ -152,7 +155,8 @@ def run_figure(h, patient, episode_id, record_ids, as_at, outdir):
         used.append(_ref(h, r["event_id"]))
     text = "\n".join(rows) + "\n"
     os.makedirs(outdir, exist_ok=True)
-    payload = json.dumps({"text": text, "as_at": as_at, "out": os.path.join(outdir, "gallery")})
+    drawn = h.clock.replace(second=0, microsecond=0)
+    payload = json.dumps({"text": text, "as_at": as_at, "out": os.path.join(outdir, "gallery"), "drawn": drawn.isoformat()})
     r = FIGURES_RUN([FIGURES_PY, "-c", _FIG, FIGURES_DIR], input=payload, capture_output=True, text=True, cwd=outdir)
     h._emit("endware", tool="figures", op="build", exit=r.returncode)
     res = json.loads(r.stdout) if r.returncode == 0 and r.stdout.strip() else {"error": r.stderr[-400:]}
@@ -164,7 +168,7 @@ def run_figure(h, patient, episode_id, record_ids, as_at, outdir):
     pre, post = locales.line("FG-ROW-OMITTED", event_id="\x00").split("\x00")
     lines = [l for l in legends.splitlines() if l.startswith(pre) and l.endswith(post)]
     omitted = [l[len(pre):len(l) - len(post)] for l in lines]
-    return {"tool": "figures", "exit": r.returncode, "result": res, "files": files, "legends": legends,
+    return {"tool": "figures", "exit": r.returncode, "drawn": drawn.isoformat(), "result": res, "files": files, "legends": legends,
             "paste_rows": len(text.splitlines()) - 1, "refs": used, "path": lp, "lines": lines,
             "refused_rows": omitted, "points": res.get("points", 0),
             "charted_rows": [f"{u['episode']}#{u['event']}" for u in used if f"{u['episode']}#{u['event']}" not in omitted]}

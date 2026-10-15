@@ -119,6 +119,10 @@ def _run(job):
         return label if r.returncode == 0 else None
 
 
+sys.path.insert(0, str(ROOT / "scripts"))
+START = __import__("safety_stamp").digest(ROOT)      # stamp only what was mutated: the sources as they were at start
+
+
 def main(argv):
     if len(argv) != 1:
         print(__doc__, file=sys.stderr)
@@ -139,6 +143,8 @@ def main(argv):
     for s in survivors:
         print(f"SURVIVED {s}")
     print(f"mutation: {len(jobs) - len(survivors)}/{len(jobs)} killed")
+    if not survivors and __import__("safety_stamp").digest(ROOT) == START:   # unchanged while mutating
+        __import__("safety_stamp").record(ROOT)
     return 0 if not survivors else 1
 
 

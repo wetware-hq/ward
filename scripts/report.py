@@ -3,10 +3,13 @@
 import os, sys
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from stack.scenarios import SCENARIOS
-from stack import pipeline, live
+from stack import pipeline, live, paths, locales
 
 
 def main():
+    if paths.TRUTH is None:
+        print(locales.line(paths.NOT_RUN))
+        return 1
     print("Loop 1: scripted agents")
     print(f"{'scenario':<66} {'calls':>5} {'min':>4} {'index':>6}  {'utility':<14} artifact")
     for sid in SCENARIOS:
@@ -29,4 +32,4 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+    sys.exit(main())

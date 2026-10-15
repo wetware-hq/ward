@@ -1,0 +1,2 @@
+# Synthetic sidecar (S15): sensitive items, data only.
+sensitive = ["pregnant_possible"]

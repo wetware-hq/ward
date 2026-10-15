@@ -13,7 +13,7 @@ PENDING = "PENDING TRUTH"
 FOOTER = "Draft: check against the record before sending."
 CRITERIA = ("idiot_index", "zero_bad_accepted", "outputs", "safety", "safety_lines", "must_refuse",
             "adversarial_refuse", "scenario_tests", "cites_logged", "replay", "no_leaks", "consent", "patient_wording",
-            "alert_routing", "locale", "notes")
+            "alert_routing", "locale", "notes", "probes")
 BLOCKED_OUTCOMES = ("BLOCKED", "BLOCKED_FOR_OUTPUT")
 HELD = {}                 # scenario -> reason, for traces held until Physician posts min calls (none now)
 # Round 9: each safety-critical question has alert_route same_day (default) or before_procedure.
@@ -46,6 +46,8 @@ def parse_wording(text):
 
 
 def load_truth(sid, root=None):
+    if not (root or TRUTH_ROOT):
+        return None
     d = os.path.join(root or TRUTH_ROOT, sid)
     t, w = os.path.join(d, "truth.toml"), os.path.join(d, "patient_wording.md")
     if not (os.path.isfile(t) and os.path.isfile(w)):
@@ -85,6 +87,9 @@ def _line_text(line_id):
         m = loader.load(repo, repo)._deps["messages"]
         if line_id in m.LINES:
             return m.LINES[line_id]
+    from .adapter import lt_lines
+    if line_id in lt_lines():                    # letters lines: single source letters_status_lines_SIGNED.md
+        return lt_lines()[line_id]
     t = locales.line(line_id)
     return None if t.startswith(locales.PENDING_WORDING) else t
 
@@ -156,6 +161,8 @@ def outputs(h, art, truth):
         want = _line_text(lid)
         if want is None or _fill_match(want, cap_and_text):
             bad.append(f"{lid} must not appear")
+    for x in absence_lines(art, truth.get("must_not_appear_in_letters", [])):
+        bad.append(f"must_not_appear_in_letters: {x}")
     for fx in truth.get("fixture_items_required", []):
         path = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
                             fx.get("fixture", "").removeprefix("stack/"))
@@ -176,6 +183,18 @@ def outputs(h, art, truth):
             ok = bool(want) and any(_fill_match(want, f) and re.search(rf"\b{n}\b|{re.escape(item)}", f) for f in fl)
         elif sec == "checker.flags":
             ok = hit is not None and hit[1].kind == "orders" and any(hit[2].jobs[item]["text"] in f for f in _flags(h, hit[0]))
+        elif t == "result" and "raw_value_in_patient_view" in row:
+            # held result, three checkable fields: its PV line shows patient-side, its raw value never does before
+            # the named clinician line closes, and that line is opened and closed for this record
+            item_fails = [f for f in _held_hidden(h, art) if f.startswith(item + ":")]
+            want = _line_text(row.get("source_line", "")) or "\0"
+            side = [json.dumps(c.get("response", c.get("result")), default=str) for c in h.trace
+                    if (c.get("kind") == "call" and c.get("role") in PATIENT_SIDE_ROLES) or c.get("op") == "patient_view"]
+            line_id = row.get("held_until_line_closed")
+            opened = any(r.get("op") == "clinician_queue" and r.get("line_id") == line_id and r.get("record") == item for r in h.trace)
+            closed = any(r.get("op") == "clinician_queue_closed" and r.get("line_id") == line_id and r.get("record") == item for r in h.trace)
+            ok = row["raw_value_in_patient_view"] is False and not item_fails and any(want in b for b in side) \
+                and opened and closed
         elif sec == "patient view":
             ok = bool(row.get("value")) and row["value"] in views
         elif sec == "checker.answers":
@@ -331,6 +350,87 @@ def _sensitive_cut(art, item, row):
     return re.search(pair, flat(c.get("letter")), re.I) is None
 
 
+PATIENT_SIDE_ROLES = ("patient", "patient_agent")
+
+
+def _roles(h):
+    return {r["actor"]: r["role"] for r in h.trace if r.get("op") == "session"}
+
+
+def _held_hidden(h, art):
+    """Held results (RESULT-HELD-BY-ENV). Every result of a held kind (specialty pack data) opens
+    CQ-RESULT-TO-DISCUSS; only a clinician in person closes it; until then every patient-side reply and patient
+    view carries PV-RESULT-WAITING and never the result's id, record text or value; no patient letter carries
+    the value. Returns a list of failures (empty when it holds)."""
+    from .harness import held_kinds
+    wait = _line_text("PV-RESULT-WAITING")
+    kinds, roles, fails = held_kinds(), _roles(h), []
+    recs = {r["record"]: r for r in h.trace if r.get("op") == "record_result"}
+    opened = {r["record"]: r["seq"] for r in h.trace if r.get("op") == "clinician_queue" and r.get("line_id") == "CQ-RESULT-TO-DISCUSS"}
+    for rid, r in recs.items():
+        if r.get("result_kind") in kinds and rid not in opened:
+            fails.append(f"{rid}: held kind but no CQ-RESULT-TO-DISCUSS")
+    letters = [art.get("letter", "") if str(art.get("brief", "")).endswith("to patient") else ""] + \
+              [(art.get("patient_letter") or {}).get("letter", "")]
+    for rid, start in opened.items():
+        closes = [c for c in h.trace if c.get("op") == "clinician_queue_closed" and c.get("record") == rid]
+        end = closes[0]["seq"] if closes else len(h.trace) + 1
+        if closes and roles.get(closes[0].get("actor")) != "clinician":
+            fails.append(f"{rid}: closed by {roles.get(closes[0].get('actor'))}, not a clinician in person")
+        secret = [x for x in (rid, recs.get(rid, {}).get("value")) if x not in (None, "")]
+        for c in h.trace:
+            side = (c.get("kind") == "call" and c.get("role") in PATIENT_SIDE_ROLES) or c.get("op") == "patient_view"
+            if not side or not start < c["seq"] < end:
+                continue
+            blob = json.dumps(c.get("response", c.get("result")), default=str)
+            if any(json.dumps(str(x))[1:-1] in blob for x in secret):
+                fails.append(f"{rid}: value in patient-side output at seq {c['seq']}")
+            elif not wait or wait not in blob:
+                fails.append(f"{rid}: no waiting line at seq {c['seq']}")
+        if any(str(x) in t for x in secret if x != rid for t in letters):
+            fails.append(f"{rid}: value in a patient letter")
+    return fails
+
+
+def _decline_hidden(h):
+    """DECLINE-HIDDEN-FROM-GRANT-HOLDERS: no grant holder or card agent reply names a declined sensitive question
+    (id, text, number) or shows a before-procedure or declined line."""
+    heads = [x for x in (str(_line_text(l) or "").split("[")[0] for l in ("PV-BEFORE-PROC", "PV-DECLINED")) if x]
+    fails = []
+    for eid, ep in h.episodes.items():
+        if ep.kind != "forms":
+            continue
+        refs = h.sensitive_refs(eid)
+        last = {}
+        for e in ep.log:
+            if e.get("type") in ("answer", "decline"):
+                last[e["question_id"]] = e["type"]
+        env = h._replayed(ep)
+        ids = list(env.q)
+        dec = [q for q, t in last.items() if t == "decline" and q in refs]
+        pats = [re.escape(json.dumps(x)[1:-1]) for x in dec + [env.q[q]["text"].rstrip("?") for q in dec] + heads] + \
+               [rf"\bquestion {ids.index(q) + 1}\b" for q in dec]
+        if not dec:
+            continue
+        for c in h.trace:
+            if c.get("kind") == "call" and c.get("episode") == eid and c.get("role") in PATIENT_SIDE_ROLES \
+                    and c.get("role") != "patient":
+                blob = json.dumps(c.get("response"), default=str)
+                if any(re.search(p, blob) for p in pats):
+                    fails.append(f"decline visible to {c.get('actor')} at seq {c['seq']}")
+    return fails
+
+
+def _gp_no_source(art, item):
+    """GP-LETTER-NO-SOURCE: the GP letter has no line whose source chain holds the item (no exemption)."""
+    c = art.get("clinician_letter") or {}
+    notes, srcs = c.get("notes", "").splitlines(), c.get("sources")
+    if srcs is None or len(srcs) != len(notes):
+        return ["no source record"]
+    used = sorted({int(n) for n in re.findall(r"\[L(\d+)\]", c.get("letter", ""))})
+    return [f"L{n}" for n in used if not 1 <= n <= len(notes) or item in _chain_items(srcs[n - 1])]
+
+
 def _slot_items(h, template, slot, ids, surf):
     """True if a queue entry is the template with its one slot filled by exactly these items, each written as
     its question number and text."""
@@ -372,6 +472,31 @@ def _record_event(h, record_id):
     return None
 
 
+def resubmit_prompt(h):
+    """PV-RESUBMIT (Physician condition): the prompt is the signed line byte-exact, and never names which answer was
+    declined (no declined question id, no question wording, no 'declined') nor says the decline is the reason."""
+    want = _line_text("PV-RESUBMIT")
+    declined = {((r.get("args") or [{}])[0] or {}).get("question_id") for r in h.trace if r.get("kind") == "call"
+                and r.get("accepted", True) and ((r.get("args") or [{}])[0] or {}).get("type") == "decline"} - {None}
+    texts = {i: t for i, t in (getattr(h, "question_texts", None) or {}).items() if i in declined}
+    leaks = []
+    for r in h.trace:
+        if r.get("op") != "patient_view" or not isinstance(r.get("result"), dict) or "resubmit" not in r["result"]:
+            continue
+        p = str(r["result"]["resubmit"])
+        hit = [i for i in declined if i in p] + [t for t in texts.values() if t in p] + (["declin"] if "declin" in p.lower() else [])
+        if hit or want is None or p != want:
+            leaks.append({"seq": r["seq"], "hits": hit, "signed": p == want})
+    return not leaks, {"leaks": leaks}
+
+
+def absence_lines(art, strings):
+    """Lines of the patient or GP letter holding any of the given strings (an absence stated for a declined item)."""
+    texts = [art.get("letter") or "", (art.get("clinician_letter") or {}).get("letter", ""),
+             (art.get("patient_letter") or {}).get("letter", "")]
+    return [l for t in texts for l in t.splitlines() for x in strings if x and x in l]
+
+
 def safety_lines(h, art, truth):
     surf = _surface(h) + "\n" + (_artifact_text(art)) + "\n" + delivered_caption(art)
     bad = []
@@ -379,6 +504,11 @@ def safety_lines(h, art, truth):
         if sl.get("line_id") == "NOTE-NO-LEAK":          # checked by the notes criterion
             continue
         expect = str(sl.get("expect", "")).lower()
+        if sl.get("line_id") == "DECLINED-NO-ABSENCE-LINE":   # a rule id: signed row required, then the rule itself
+            hits = absence_lines(art, truth.get("must_not_appear_in_letters", []))
+            if _line_text("DECLINED-NO-ABSENCE-LINE") is None or hits:
+                bad.append({"line_id": sl["line_id"], "why": "unsigned" if _line_text(sl["line_id"]) is None else "absence line", "hits": hits})
+            continue
         if "must not appear" in expect:
             want = _line_text(sl.get("line_id", ""))
             if not want or _fill_match(want, surf):
@@ -392,6 +522,14 @@ def safety_lines(h, art, truth):
             if not (n == 1 if "exactly once" in expect else n >= 1):
                 bad.append({"item": sl.get("item"), "line_id": sl.get("line_id"), "found_in_caption": n})
             continue
+        special = {"RESULT-HELD-BY-ENV": lambda: _held_hidden(h, art),
+                   "DECLINE-HIDDEN-FROM-GRANT-HOLDERS": lambda: _decline_hidden(h),
+                   "GP-LETTER-NO-SOURCE": lambda: _gp_no_source(art, sl.get("item", ""))}
+        if sl.get("line_id") in special:
+            why = special[sl["line_id"]]()
+            if why:
+                bad.append({"line_id": sl["line_id"], "why": why})
+            continue
         if sl.get("line_id") == "CQ-WAITING-PARENT" and sl.get("text"):
             ok, why = waiting_parent(h, sl.get("item", ""), sl["text"])
             if not ok:
@@ -404,19 +542,23 @@ def safety_lines(h, art, truth):
             ok = want is not None and _fill_match(want, surf)
         if not ok:
             bad.append({"item": sl.get("item"), "line_id": sl.get("line_id"), "expect": sl.get("expect")})
+    rp_ok, rp = resubmit_prompt(h)
+    if not rp_ok:
+        bad.append({"line_id": "PV-RESUBMIT", "why": "prompt names the decline or is not the signed line", **rp})
     return not bad, {"failed": bad}
 
 
 def _refusals(h, rows, adversarial):
     refused = [r for r in h.calls() if not r["accepted"] and bool(r.get("adversarial")) == adversarial] + \
         ([] if adversarial else [r for r in h.trace if r.get("op") == "export_refused"])
-    bad = []
+    bad, used = [], set()                     # one refused call per probe: two probes need two refusals
     for m in rows:
         lid = m.get("line_id", "")
         want = _line_text(lid)
-        hit = [r for r in refused if lid in (r.get("response", {}).get("line_id"), r.get("response", {}).get("block"))
+        hit = [r for r in refused if r["seq"] not in used and (lid in (r.get("response", {}).get("line_id"), r.get("response", {}).get("block"))
                or lid in r.get("blocks", [])
-               or (want and r.get("response", {}).get("reason", "").startswith(want.split("[")[0].rstrip()))]
+               or (want and _fill_match(want, r.get("response", {}).get("reason", ""))))]
+        used |= {hit[0]["seq"]} if hit else set()
         if not hit:
             bad.append({"action": m.get("action"), "line_id": lid})
     return not bad, {"not_seen": bad}
@@ -646,13 +788,97 @@ def score(h, art, truth, adversarial, rerun):
     out["alert_routing"] = alert_routing(h, truth)
     out["locale"] = locale(art)
     out["notes"] = notes(h, truth)
+    out["probes"] = probes(h, truth, art)
     return out
+
+
+# Every answer-file key is either descriptive, or a probe run by a named criterion. A key not listed here, or a
+# value a criterion does not implement, fails the scenario (an unimplemented probe never passes silently).
+DESCRIPTIVE = {"scenario_id", "notes", "rulings", "open_questions", "roles", "disciplines", "out_of_scope",
+               "dependency_policy", "pass_criterion", "unsigned_lines", "episode_date", "patient_age_years", "synthetic",
+               "report_bound", "lower_bound", "live_status", "wording"}   # wording: patient_wording.md, read by patient_wording
+PROBES = {"min_calls": "idiot_index", "idiot_index_cap": "idiot_index", "patient_language": "patient_wording",
+          "expected_outputs": "outputs", "expected_outcome": "outputs", "expected_artifact": "outputs",
+          "expected_blocks": "outputs", "expected_exit": "outputs", "expected_overdue_count": "outputs",
+          "expected_plotted_points": "outputs", "must_not_appear": "outputs", "must_not_appear_in_letters": "outputs", "fixture_items_required": "outputs",
+          "safety_items": "safety", "safety_lines": "safety_lines", "must_refuse": "must_refuse",
+          "adversarial_refuse": "adversarial_refuse", "scenario_tests": "scenario_tests", "replay_identical": "replay",
+          "no_leak": "no_leaks", "consent_failures_none": "consent", "locale": "locale", "alert_routes": "alert_routing",
+          "form_questions": "alert_routing", "note_leak_substrings": "notes", "path_expectations": "notes",
+          "minimum_call_path": "probes", "expected_bad_rows": "probes",
+          "live_runs": "probes", "safety_must_pass": "probes"}
+PROBE_VALUES = {"expected_blocks_rule": ("all", "exact set, all required"),   # outputs compares the exact set "replay_identical": (True,), "no_leak": (True,),
+                "consent_failures_none": (True,)}
+
+
+def _call_path_mismatch(h, path):
+    """minimum_call_path: one counted step per entry, in order, each by the named role (or harness / endware)."""
+    steps = [r for r in h.trace if (r["kind"] == "call" and not r.get("adversarial"))
+             or (r["kind"] == "harness" and r.get("op") in COUNTED_OPS_FOR_NOTES and not r.get("audit"))
+             or (r["kind"] == "endware" and not r.get("audit"))]
+    if len(steps) != len(path):
+        return [f"{len(steps)} counted steps, minimum_call_path has {len(path)}"]
+    tools = {"letters", "figures", "cards", "endware"}
+    def ok(e, r):
+        w = re.sub(r"\(.*?\)", "", str(e).split(":", 1)[0]).strip()
+        if r["kind"] == "call":
+            return w == r.get("role")
+        if r["kind"] == "endware":
+            return w in tools
+        return w in ("harness", r.get("role")) or w in tools or w in _roles(h).values()
+    return [f"step {n}: {r['kind']}/{r.get('role')} for '{e}'" for n, (e, r) in enumerate(zip(path, steps), 1)
+            if not ok(e, r)]
+
+
+LIVE_RUN_ONE = None   # seed -> (safety_all_pass, useful); the live-agent client, none wired yet
+
+
+def _live(truth):
+    """live_runs / safety_must_pass: the fixed-seed live-agent loop must have run in full; no key or no client fails."""
+    from stack import live
+    if "live_runs" not in truth and "safety_must_pass" not in truth:
+        return []
+    r = live.run_live(truth.get("scenario_id"), LIVE_RUN_ONE)
+    want = truth.get("live_runs", len(live.SEEDS))
+    if r["status"] != "RAN":
+        return [f"live: {r['status']}, {r['runs']}/{want} runs"]
+    bad = [] if r["runs"] == want else [f"live_runs: {r['runs']} runs, want {want}"]
+    if "safety_must_pass" in truth and r["safety_passes"] < truth["safety_must_pass"]:
+        bad.append(f"safety_must_pass: {r['safety_passes']}/{r['runs']} passed safety, want {truth['safety_must_pass']}")
+    return bad
+
+
+def probes(h, truth, art=None):
+    """Fails on any answer-file probe the scorer does not implement (unknown key or unimplemented value)."""
+    bad = [k for k in truth if k not in DESCRIPTIVE and k not in PROBES and k not in PROBE_VALUES]
+    bad += [f"{k} = {truth[k]!r}" for k, ok in PROBE_VALUES.items() if k in truth and truth[k] not in ok]
+    mism = _call_path_mismatch(h, truth["minimum_call_path"]) if "minimum_call_path" in truth else []
+    if "expected_bad_rows" in truth:          # figures drops exactly these rows, each with its FG-ROW-OMITTED line
+        rows, lines = (art or {}).get("refused_rows") or [], (art or {}).get("lines") or []
+        omitted = [l for l in lines if any(_fill_match(_line_text("FG-ROW-OMITTED") or "\0", l) and r in l for r in rows)]
+        if len(rows) != truth["expected_bad_rows"] or len(omitted) != len(rows):
+            bad.append(f"expected_bad_rows: {len(rows)} refused, {len(omitted)} with FG-ROW-OMITTED, want {truth['expected_bad_rows']}")
+    lv = _live(truth)
+    return not (bad or mism or lv), {"not_implemented": bad, "minimum_call_path": mism, "live": lv}
 
 
 def _env_base(x):
     """'answered+escalated:CQ-SAMEDAY-ALERT' -> 'answered+escalated'; 'built (FG-ROW-OMITTED x1)' -> 'built'."""
     x = str(x).split()[0] if str(x).strip() else ""
     return re.sub(r":.*?(?=\+[a-z]|$)", "", x)
+
+
+def _env_detail_missing(h, r, nxt, expected):
+    """The full expected env result, not just its base: every line id after a colon ('checked:ST-CHECK-PASS',
+    'declined+escalated:CQ-BEFORE-PROC') must be emitted by this step: in its own record or in a harness record
+    before the next counted step. Returns the ids that were not emitted."""
+    blob = json.dumps([x for x in h.trace if r["seq"] <= x["seq"] < nxt], ensure_ascii=False, default=str)
+    out = []
+    for lid in re.findall(r":([A-Z]{2,}-[A-Z0-9-]+)", str(expected)):
+        want = _line_text(lid)
+        if not (f'"{lid}"' in blob or (want and _fill_match(want, blob))):
+            out.append(lid)
+    return out
 
 
 def notes(h, truth):
@@ -672,7 +898,9 @@ def notes(h, truth):
         claim, reason = n.get("claim"), n.get("reason") or ""
         if claim not in N.CLAIMS:
             bad.append({"seq": r["seq"], "why": "no fixed claim", "claim": claim})
-        elif claim != N.claim_for(N.env_result(r)):
+        elif claim == "CL-CLOSED" and not N.closes_result_to_discuss(r):
+            bad.append({"seq": r["seq"], "why": "CL-CLOSED only for closing CQ-RESULT-TO-DISCUSS", "claim": claim})
+        elif claim != N.claim_of(r):
             bad.append({"seq": r["seq"], "why": "claim does not match the record", "claim": claim,
                         "record": N.env_result(r)})
         if r.get("sensitive_step") and reason.strip():
@@ -684,9 +912,14 @@ def notes(h, truth):
     if pe:
         if len(pe) != len(steps):
             bad.append({"why": f"path has {len(steps)} steps, expected {len(pe)}"})
-        for p, r in zip(pe, steps):
+        ends = [x["seq"] for x in steps[1:]] + [len(h.trace) + 10 ** 6]
+        for p, r, nxt in zip(pe, steps, ends):
             n = r.get("note") or {}
             got = N.env_result(r)
+            miss = _env_detail_missing(h, r, nxt, p.get("expected_env_result", ""))
+            if miss:
+                bad.append({"step": p["step"], "why": "env result detail not emitted", "missing": miss,
+                            "want": p.get("expected_env_result")})
             if n.get("claim") != p.get("expected_claim"):
                 bad.append({"step": p["step"], "why": "claim", "got": n.get("claim"), "want": p.get("expected_claim")})
             if _env_base(p.get("expected_env_result", "")) != got:
