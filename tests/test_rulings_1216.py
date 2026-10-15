@@ -185,3 +185,12 @@ def test_box_clock_patch_is_restored_after_the_test():
     assert _dt.date is not _BoxDate and _dt.datetime is not _BoxDateTime
     assert H.datetime is _dt and loader.cards().__dict__.get("date") is not _BoxDate
     assert abs(time.time() - _dt.datetime.now().timestamp()) < 5 and time.time() != 1_792_000_000.0
+
+
+def test_guardian_ended_probes_only_in_s13():
+    """The G13R/G13E guardians belong to S13's child; no other scenario probes with them."""
+    import inspect
+    from stack import scenarios as S
+    for fn in (S.s12, S.s15):
+        assert "G13R" not in inspect.getsource(fn) and "G13E" not in inspect.getsource(fn)
+    assert "G13E" in inspect.getsource(S.s13)

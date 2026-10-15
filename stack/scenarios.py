@@ -422,8 +422,6 @@ def s12(h, out, tamper=None):
     dr.step(EP, A("review"))                                      # review never finalises a failed form
     ca = h.session("SYNTH-clin-agent-12", "clinician_agent", P, scope=(DISC["MED"],))
     probe(h, lambda: ca.step(EP, A("submit")))                   # RF-CLIN-AGENT: an agent never resubmits
-    for ended in ("SYNTH-PERSON-G13R", "SYNTH-PERSON-G13E"):     # revoked / expired by cards grant_state, scenario clock
-        probe(h, lambda: h.session(ended, "guardian", P).step(EP, A("submit")))   # RF-GRANT-ENDED, nothing changes
     h.patient_view(EP)                                           # PV-RESUBMIT, naming no question
     pa.step(EP, A("submit"))                                     # resubmit: the full check re-runs
     h.check(EP)
@@ -485,8 +483,6 @@ def s15(h, out, tamper=None):
     pa.step(EP, A("submit"))
     dr.step(EP, A("review"))                                      # review never finalises a failed form
     probe(h, lambda: ca.step(EP, A("submit")))                   # RF-CLIN-AGENT: an agent never resubmits
-    for ended in ("SYNTH-PERSON-G13R", "SYNTH-PERSON-G13E"):     # revoked / expired by cards grant_state, scenario clock
-        probe(h, lambda: h.session(ended, "guardian", P).step(EP, A("submit")))   # RF-GRANT-ENDED, nothing changes
     v = h.patient_view(EP)                                       # PV-RESUBMIT, naming no question
     if tamper and tamper.startswith("resubmit_prompt_"):
         bad = {"resubmit_prompt_names_question": v.get("resubmit", "") + " (pregnant_possible)",
