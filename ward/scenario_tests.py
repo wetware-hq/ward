@@ -14,7 +14,8 @@ REVIEWED = {"S08-T-agent-resubmit-unchanged-accepted",  # Physician-signed 12:30
             # Physician sign-off 15 Oct 20:13
             "S13-T-resubmit-still-failing", "S13-T-guardian-unexpired-by-scenario-clock",
             "S14-T1-held-value-in-patient-letter", "S14-T2-held-value-in-grant-holder-view",
-            "S15-T1-decline-in-grant-holder-view", "S15-T-resubmit-still-failing"}
+            "S15-T1-decline-in-grant-holder-view", "S15-T-resubmit-still-failing",
+            "S12-T-resubmit-still-failing", "S12-T-absence-line-after-decline"}   # Physician 15 Oct 21:48
 MH_CASE = None                            # set lazily: ward cases/mood_screen.toml
 EP, P, AGENT = "SYNTH-EP-0591", "SYNTH-P0591", "SYNTH-agent-0591"
 

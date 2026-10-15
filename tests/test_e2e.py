@@ -8,9 +8,7 @@ from ward import pipeline, scorer
 from truthgate import missing_truth, truth_path
 
 RUN_ALL = os.environ.get("WARD_RUN_TRACES") == "1"
-KNOWN_RED = {
-    "S12-patient-declines-safety-question-to-letter-with-privacy-line": "waits on letters (privacy line, PRIVACY_BLOCKED refusals) and Physician's C15/allergy_any ruling; declined route scored in test_trace_negatives",
-}
+KNOWN_RED = {}   # S12 passes since the letters wiring and Physician review (15 Oct 21:48)
 
 
 @pytest.mark.parametrize("sid", list(SCENARIOS))
