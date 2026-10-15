@@ -116,9 +116,6 @@ import json, sys, os
 sys.path.insert(0, sys.argv[1])
 import figures
 a = json.load(sys.stdin)
-from datetime import datetime
-figures.DRAWN = datetime.fromisoformat(a["drawn"]).replace(second=0, microsecond=0)   # scenario clock, never the box clock
-figures.ANCHOR.update(t=figures.DRAWN)
 try:
     d, checks = figures.build(a["text"], a["out"] + ".html", as_at=a["as_at"])
     files = sorted(os.path.join(d, f) for f in os.listdir(d))
@@ -156,8 +153,11 @@ def run_figure(h, patient, episode_id, record_ids, as_at, outdir, audience="clin
     text = "\n".join(rows) + "\n"
     os.makedirs(outdir, exist_ok=True)
     drawn = h.clock.replace(second=0, microsecond=0)
-    payload = json.dumps({"text": text, "as_at": as_at, "out": os.path.join(outdir, "gallery"), "drawn": drawn.isoformat()})
-    r = FIGURES_RUN([FIGURES_PY, "-c", _FIG, FIGURES_DIR], input=payload, capture_output=True, text=True, cwd=outdir)
+    payload = json.dumps({"text": text, "as_at": as_at, "out": os.path.join(outdir, "gallery")})
+    # figures' one approved clock, mode set explicitly: test mode, on the scenario clock (never the box clock)
+    fenv = dict(os.environ, FIGURES_CLOCK="test", FIGURES_SCENARIO_CLOCK=drawn.isoformat())
+    r = FIGURES_RUN([FIGURES_PY, "-c", _FIG, FIGURES_DIR], input=payload, capture_output=True, text=True, cwd=outdir,
+                    env=fenv)
     h._emit("endware", tool="figures", op="build", exit=r.returncode)
     res = json.loads(r.stdout) if r.returncode == 0 and r.stdout.strip() else {"error": r.stderr[-400:]}
     if "refused" in res:                       # figures made no figure: its own FG-REFUSE-DATA lines
