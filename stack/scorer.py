@@ -431,7 +431,7 @@ def _held_hidden(h, art):
     return fails
 
 
-STAFF_ONLY_LINES = ("RF-CLOCK-UNSET",)    # signed for staff and agents only (Physician 12:41)
+STAFF_ONLY_LINES = ("RF-CLOCK-UNSET", "RF-LIVE-NOT-TEST", "RF-LIVE-CLOCK-NOT-TEST")    # signed for staff and agents only (Physician 12:41)
 
 
 def staff_only_in_patient_output(h, art):

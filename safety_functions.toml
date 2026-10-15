@@ -67,6 +67,10 @@ functions = [
     "check_t4",
 ]
 
+[[modules]]
+path = "stack/live.py"
+functions = ["live_guard", "send_guarded", "_strings"]
+
 # A refusal must not change the calling handle, the episodes or the trace beyond its own refusal record.
 [[session]]
 path = "stack/harness.py"

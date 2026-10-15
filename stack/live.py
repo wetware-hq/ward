@@ -1,7 +1,59 @@
 """Live-agent mode for S05 and S07: 20 runs with fixed seeds, a model choosing the agent's actions.
 Needs STACK_MODEL_API_KEY. Without it the result is WAITING ON KEY, never a pass. No client is wired yet,
 so a key alone gives NO CLIENT, also never a pass."""
-import math, os
+import math, os, re
+
+# ---- live guard (signed ruling 15 Oct 17:01): deterministic, before any model send, provider-agnostic.
+CLOCK_ENV = "STACK_CLOCK"                   # the approved clock mode: "test" or "real"; unset = no mode
+# the fixed synthetic test patients (every patient the S01-S15 scenarios open; a test checks the derivation)
+TEST_PATIENTS = frozenset((
+    "SYNTH-P0101", "SYNTH-P0201", "SYNTH-P0301", "SYNTH-P0302", "SYNTH-P0401", "SYNTH-P0501", "SYNTH-P0611",
+    "SYNTH-P0612", "SYNTH-P0701", "SYNTH-P0702", "SYNTH-P0801", "SYNTH-P0901", "SYNTH-P1001", "SYNTH-P1002",
+    "SYNTH-P1101", "SYNTH-P1201", "SYNTH-P1401", "SYNTH-P1501", "SYNTH-PERSON-C13"))
+DATE = re.compile(r"(?<!\d)(\d{4})-\d{2}-\d{2}")
+
+
+class LiveRefused(Exception):
+    """A staff-only refusal: line_id plus the signed text. Nothing was sent."""
+    def __init__(self, line_id):
+        from .scorer import _line_text
+        self.line_id, self.text = line_id, _line_text(line_id) or ""
+        super().__init__(f"{line_id}: {self.text}")
+
+
+def _strings(v):
+    if isinstance(v, dict):
+        for k, x in v.items():
+            yield str(k)
+            yield from _strings(x)
+    elif isinstance(v, (list, tuple)):
+        for x in v:
+            yield from _strings(x)
+    else:
+        yield str(v)
+
+
+def live_guard(records):
+    """Refuse unless the approved clock mode is test (RF-LIVE-CLOCK-NOT-TEST), and every record's patient id is on
+    TEST_PATIENTS with every date in the record in 1930-1939 (RF-LIVE-NOT-TEST). Any 'test' flag in a record is
+    ignored. Returns None when the send may go ahead."""
+    if os.environ.get(CLOCK_ENV) != "test":
+        raise LiveRefused("RF-LIVE-CLOCK-NOT-TEST")
+    if not records:
+        raise LiveRefused("RF-LIVE-NOT-TEST")
+    for r in records:
+        if not isinstance(r, dict) or r.get("patient") not in TEST_PATIENTS:
+            raise LiveRefused("RF-LIVE-NOT-TEST")
+        for t in _strings(r):
+            if any(not 1930 <= int(y) <= 1939 for y in DATE.findall(t)):
+                raise LiveRefused("RF-LIVE-NOT-TEST")
+    return None
+
+
+def send_guarded(records, send):
+    """The only way to a model send: the guard first; on refusal send is never called."""
+    live_guard(records)
+    return send(records)
 
 KEY_ENV = "STACK_MODEL_API_KEY"
 LIVE_SCENARIOS = ("S05-mh-screen-by-patient-agent", "S07-adversarial-agent")
