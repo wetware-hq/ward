@@ -16,7 +16,13 @@ export WARD_TRUTH="$S/stack_truth" LETTERS_TRUTH="$S/stack_truth"
 export CARDS_TRUTH="$S/cards_truth" CARDS_WORDING="$S/cards_wording"
 export WORDING_DIRS="$S/wording" REUSED_SIGNED="$S/wording/forms_orders_lines_SIGNED.md"
 export CARDS_SIGNED="$S/wording/cards_lines_SIGNED.md"
-export WARD_FIGURES_PYTHON="${WARD_FIGURES_PYTHON:-$(command -v python3)}"   # needs figures' packages (a fresh clone has no figures/.venv)
+# figures needs its packages; a fresh clone has no figures/.venv — require an interpreter that can import them
+if [ -z "${WARD_FIGURES_PYTHON:-}" ]; then
+  if [ -x "$S/figures/.venv/bin/python" ]; then WARD_FIGURES_PYTHON="$S/figures/.venv/bin/python"
+  else echo "set WARD_FIGURES_PYTHON to a Python that can import figures' packages (fresh clone has no figures/.venv)"; exit 2
+  fi
+fi
+export WARD_FIGURES_PYTHON
 unset WARD_MODEL_API_KEY $(compgen -e | grep '^OPENROUTER' || true)   # scripted only: no model key reaches any run
 export MUTATE_WORKERS="${MUTATE_WORKERS:-4}"
 for r in forms orders figures letters cards ward; do       # every repo by name; fail loudly when one is missing
@@ -45,5 +51,6 @@ run orders  python3 scripts/prepush.py "$REUSED_SIGNED"
 run figures python3 scripts/prepush.py "$REUSED_SIGNED"
 run letters python3 scripts/prepush.py
 run cards   python3 scripts/prepush.py "$CARDS_SIGNED" "$REUSED_SIGNED"
+"$WARD_FIGURES_PYTHON" -c "import polars,matplotlib" 2>/dev/null || { echo "WARD_FIGURES_PYTHON=$WARD_FIGURES_PYTHON cannot import polars/matplotlib"; exit 2; }
 run ward   python3 scripts/prepush.py
 echo "bar: rc=$rc"; exit $rc

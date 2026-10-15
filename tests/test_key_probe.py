@@ -55,7 +55,8 @@ def test_bar_child_fails_on_leaked_dummy_file(tmp_path):
     (tmp_path / "ward" / "scripts" / "key_probe.py").write_text(open(key_probe.__file__).read())
     (tmp_path / "forms" / ".env").write_text("OPENROUTER_API_KEY=" + DUMMY + "\n")
     p = subprocess.run(["bash", os.path.join(root, "scripts/bar.sh"), str(tmp_path)], capture_output=True, text=True,
-                       env={"PATH": os.environ["PATH"], "HOME": str(tmp_path), "WARD_MODEL_API_KEY": DUMMY})
+                       env={"PATH": os.environ["PATH"], "HOME": str(tmp_path), "WARD_MODEL_API_KEY": DUMMY,
+                            "WARD_FIGURES_PYTHON": sys.executable})
     out = p.stdout + p.stderr
     assert p.returncode != 0 and "KEY PROBE FAILED" in out and "repo file .env" in out and "!! forms failed" in out
     assert DUMMY not in out and "env name WARD_MODEL_API_KEY" not in out   # env -i: the leaked env var never reached the child
