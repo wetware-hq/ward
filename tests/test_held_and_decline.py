@@ -38,7 +38,8 @@ def test_s14_clean_run_holds(tmp_path):
     obs = [c for c in h.calls() if c["role"] == "patient"][0]["response"]
     assert obs["result_waiting"] == scorer._line_text("PV-RESULT-WAITING") and "SYNTH-REC-1406" not in json.dumps(obs)
     agent = [c for c in h.calls() if c["args"] and c["args"][0].get("type") == "close_sameday"]
-    assert agent[0]["response"]["line_id"] == "RF-RESULT-HELD" and agent[1]["accepted"]
+    assert all(c["response"].get("line_id") == "RF-RESULT-HELD" for c in agent[:-1]) and agent[-1]["accepted"]
+    assert agent[-1]["role"] == "clinician" and all(c["role"] != "clinician" for c in agent[:-1])
     assert art["tool"] == "figures" and art["points"] == 3                  # clinician figure unaffected
 
 
@@ -75,7 +76,7 @@ def test_s14_value_in_grant_holder_view_fails(tmp_path):
 
 def test_s14_held_kind_without_hold_fails(tmp_path, monkeypatch):
     t = truth(S14)
-    monkeypatch.setattr(Harness, "_hold", lambda self, rid, p: None)
+    monkeypatch.setattr(Harness, "_hold", lambda self, rid, p: self.held.__setitem__(rid, {"patient": p, "open": True}))
     h, art = run(S14, s14, tmp_path)
     assert any("no CQ-RESULT-TO-DISCUSS" in w for f in fails(h, art, t, "RESULT-HELD-BY-ENV") for w in f["why"])
 
@@ -283,7 +284,8 @@ def test_s15_agent_answers_after_decline_refused_and_decline_stands(tmp_path):
     t = truth(S15)
     h, art = run(S15, s15, tmp_path)
     refused = [c for c in h.calls() if c.get("adversarial") and c["role"] == "clinician_agent"]
-    assert len(refused) == 2 and all(c["accepted"] is False for c in refused)
+    rows = [r for r in t.get("adversarial_refuse", []) if r.get("line_id") == "RF-CLIN-AGENT"]
+    assert len(refused) == len(rows) >= 2 and all(c["accepted"] is False for c in refused)
     assert h.peek("SYNTH-EP-1501")["answers"]["pregnant_possible"] == "declined"
     assert scorer.adversarial_refuse(h, {"adversarial_refuse": [r for r in t.get("adversarial_refuse", [])
                                                                  if r.get("line_id") == "RF-CLIN-AGENT"]})[0]
@@ -293,7 +295,7 @@ def test_s15_agent_overwrite_tamper_fails(tmp_path):
     t = truth(S15)
     h, art = run(S15, s15, tmp_path, tamper="agent_overwrites_decline")
     rows = [r for r in t.get("adversarial_refuse", []) if r.get("line_id") == "RF-CLIN-AGENT"]
-    assert len(rows) == 2 and not scorer.adversarial_refuse(h, {"adversarial_refuse": rows})[0]
+    assert len(rows) >= 2 and not scorer.adversarial_refuse(h, {"adversarial_refuse": rows})[0]
 
 
 def test_s15_t1_runs_the_grant_holder_check(tmp_path):

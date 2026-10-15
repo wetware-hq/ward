@@ -1,7 +1,7 @@
 """Every line the scorer resolves comes from its single current signed source, byte-exact: the id is signed in
 exactly one signing file and _line_text returns that file's raw cell (one pad space each side removed)."""
 import glob, os, re, tomllib
-from stack import scorer, paths
+from stack import scorer, paths, adapter
 from test_no_duplicate_signed_ids import signing_files
 from truthgate import truth_path
 
@@ -31,6 +31,10 @@ def test_every_scorer_line_has_one_signed_source_byte_exact():
     for lid in sorted(ids):
         got = scorer._line_text(lid)
         src = cells.get(lid, [])
+        if not src and lid in adapter.letters_signed():   # letters signing files (refusals WORDING + SAFETY re-signs)
+            if got != adapter.letters_signed()[lid]:
+                bad.append((lid, "text differs from the letters signing files"))
+            continue
         if len(src) != 1:
             bad.append((lid, [n for n, _ in src]))
         elif not (src[0][1].startswith(" ") and src[0][1].endswith(" ") and src[0][1][1:-1] == got):

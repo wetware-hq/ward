@@ -114,8 +114,9 @@ def test_t4_broken(decl, broken):
 
 
 def test_all_s05_tests_implemented_t5_pending_review(decl):
-    assert set(st.IMPLEMENTED) == set(decl)
-    assert st.REVIEWED == set(decl)                                         # all five signed by Physician
+    assert set(decl) <= set(st.IMPLEMENTED)                               # S05's five, plus S08/S12-S15 tests
+    assert all(k.startswith(('S05-', 'S08-', 'S12-', 'S13-', 'S14-', 'S15-')) for k in st.IMPLEMENTED)
+    assert set(decl) <= st.REVIEWED                                         # all five signed by Physician
 
 
 def test_t5_check_logic(decl):
