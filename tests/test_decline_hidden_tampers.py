@@ -51,3 +51,8 @@ def test_flag_staff_side_only(run):
             or (r.get("kind") == "call" and r.get("role") in ("patient", "patient_agent", "guardian"))]
     blob = json.dumps([r.get("response", r.get("result")) for r in side], default=str)
     assert "closed_sensitive" not in blob and "sensitive" not in blob.lower()
+
+
+def test_declined_line_head_in_grant_holder_reply_fails(run):
+    head = scorer._line_text("PV-DECLINED").split("[")[0]
+    assert head and scorer._decline_hidden(_inject(run, {"result": head}))

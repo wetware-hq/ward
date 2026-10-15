@@ -159,3 +159,20 @@ def test_resubmit_needs_an_earlier_submit():
         first = [x for x in h.trace if x.get("kind") == "call" and x.get("accepted")
                  and isinstance((x.get("args") or [{}])[0], dict) and (x.get("args") or [{}])[0].get("type") == "submit"]
         assert first and not first[0].get("resubmit")
+
+
+def test_submits_before_review_are_not_resubmits():
+    h, _ = _run("S08")
+    subs = [r for r in h.trace if r.get("kind") == "call" and r.get("accepted")
+            and (r.get("args") or [{}])[0].get("type") == "submit"]
+    first_review = min(r["seq"] for r in h.trace if r.get("kind") == "call" and r.get("accepted")
+                       and (r.get("args") or [{}])[0].get("type") == "review")
+    before = [r for r in subs if r["seq"] < first_review]
+    assert len(before) >= 2 and not any(r.get("resubmit") for r in before)
+
+
+def test_resubmit_prompt_record_without_accepted_key_counts_as_accepted():
+    want = scorer._line_text("PV-RESUBMIT")
+    h = _rp(want + " pregnant_possible")
+    del h.trace[0]["accepted"]
+    assert scorer.resubmit_prompt(h)[1]["leaks"][0]["hits"] == ["pregnant_possible"]
