@@ -198,17 +198,6 @@ def outputs(h, art, truth):
             closed = any(r.get("op") == "clinician_queue_closed" and r.get("line_id") == line_id and r.get("record") == item for r in h.trace)
             ok = row["raw_value_in_patient_view"] is False and not item_fails and any(want in b for b in side) \
                 and opened and closed
-        elif t == "form_answer" and row.get("status") == "declined" and hit is not None and hit[1].kind == "forms":
-            # declined, never missing, never no: the log's last event for the item is a decline, the checker shows
-            # the signed source line for it, and the letter carries the signed declined line, not an answer
-            last = [e for e in hit[1].log if e.get("question_id") == item and e.get("type") in ("answer", "decline")]
-            n = hit[3].index(item) + 1
-            want = _line_text(row.get("source_line", "")) or ""
-            fl = [f for r in h.trace if r.get("op") == "check" and r.get("episode") == hit[0]
-                  for f in (r.get("result") or {}).get("flags", [])] + list(h.peek(hit[0]).get("flags", []))
-            ok = bool(last) and last[-1]["type"] == "decline" and bool(want) and \
-                any(_fill_match(want, f) and re.search(rf"\b{n}\b|{re.escape(item)}", f) for f in fl) and \
-                any(x.lstrip("- ") in text for x in _declined_letter_lines(h))
         elif sec == "patient view":
             ok = bool(row.get("value")) and row["value"] in views
         elif sec == "checker.answers":
@@ -237,6 +226,19 @@ def outputs(h, art, truth):
         elif t == "letter":
             ok = art.get("tool") == "letters" and art.get("exit") == 0 and FOOTER in text and \
                 (not row.get("value") or row["value"] in text)
+        elif t == "form_answer" and row.get("status") == "declined" and hit is not None and hit[1].kind == "forms":
+            # declined, never missing, never no: the log's last event for the item is a decline, the checker shows
+            # the signed source line for it, and the letter carries the signed declined line, not an answer
+            last = [e for e in hit[1].log if e.get("question_id") == item and e.get("type") in ("answer", "decline")]
+            n = hit[3].index(item) + 1
+            want = _line_text(row.get("source_line", "")) or ""
+            fl = [f for r in h.trace if r.get("op") == "check" and r.get("episode") == hit[0]
+                  for f in (r.get("result") or {}).get("flags", [])] + list(h.peek(hit[0]).get("flags", []))
+            in_letter = any(x[2:] in text for x in _declined_letter_lines(h))
+            src = row.get("source_line", "")
+            shown = in_letter if src.startswith("LT-") else bool(want) and in_letter and \
+                any(_fill_match(want, f) and re.search(rf"\b{n}\b|{re.escape(item)}", f) for f in fl)
+            ok = bool(last) and last[-1]["type"] == "decline" and shown
         else:
             vals = [str(row.get(k, "")) for k in ("value", "unit", "route", "frequency", "duration") if row.get(k)]
             ok = bool(vals) and all(v in text for v in vals)
