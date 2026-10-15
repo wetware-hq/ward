@@ -272,7 +272,7 @@ def _s12_absence(h, art, d):
     t = Harness(sid, seed, start, pack=pack, language="en")
     if not strings:
         return ["must_not_appear_in_letters missing from the answer file"]
-    hits = absence_lines(fn(t, tempfile.mkdtemp(), tamper="absence_line"), strings)
+    hits = absence_lines(fn(t, tempfile.mkdtemp(), tamper="absence_line"), strings, [d["section"] for d in t.declined_rows("SYNTH-P1201")])
     return [] if hits else ["tampered letter states an absence but the rule found none"]
 
 

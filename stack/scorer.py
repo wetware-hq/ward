@@ -90,6 +90,9 @@ def _line_text(line_id):
     from .adapter import lt_lines
     if line_id in lt_lines():                    # letters lines: single source letters_status_lines_SIGNED.md
         return lt_lines()[line_id]
+    from .adapter import letters_signed
+    if line_id in letters_signed():              # letters refusal lines: letters_refusals_WORDING.md (+ _SAFETY.md)
+        return letters_signed()[line_id]
     t = locales.line(line_id)
     return None if t.startswith(locales.PENDING_WORDING) else t
 
@@ -161,7 +164,7 @@ def outputs(h, art, truth):
         want = _line_text(lid)
         if want is None or _fill_match(want, cap_and_text):
             bad.append(f"{lid} must not appear")
-    for x in absence_lines(art, truth.get("must_not_appear_in_letters", [])):
+    for x in absence_lines(art, truth.get("must_not_appear_in_letters", []), _declined_sections(h)):
         bad.append(f"must_not_appear_in_letters: {x}")
     for fx in truth.get("fixture_items_required", []):
         path = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
@@ -195,6 +198,17 @@ def outputs(h, art, truth):
             closed = any(r.get("op") == "clinician_queue_closed" and r.get("line_id") == line_id and r.get("record") == item for r in h.trace)
             ok = row["raw_value_in_patient_view"] is False and not item_fails and any(want in b for b in side) \
                 and opened and closed
+        elif t == "form_answer" and row.get("status") == "declined" and hit is not None and hit[1].kind == "forms":
+            # declined, never missing, never no: the log's last event for the item is a decline, the checker shows
+            # the signed source line for it, and the letter carries the signed declined line, not an answer
+            last = [e for e in hit[1].log if e.get("question_id") == item and e.get("type") in ("answer", "decline")]
+            n = hit[3].index(item) + 1
+            want = _line_text(row.get("source_line", "")) or ""
+            fl = [f for r in h.trace if r.get("op") == "check" and r.get("episode") == hit[0]
+                  for f in (r.get("result") or {}).get("flags", [])] + list(h.peek(hit[0]).get("flags", []))
+            ok = bool(last) and last[-1]["type"] == "decline" and bool(want) and \
+                any(_fill_match(want, f) and re.search(rf"\b{n}\b|{re.escape(item)}", f) for f in fl) and \
+                any(x.lstrip("- ") in text for x in _declined_letter_lines(h))
         elif sec == "patient view":
             ok = bool(row.get("value")) and row["value"] in views
         elif sec == "checker.answers":
@@ -508,11 +522,29 @@ def resubmit_prompt(h):
     return not leaks, {"leaks": leaks}
 
 
-def absence_lines(art, strings):
-    """Lines of the patient or GP letter holding any of the given strings (an absence stated for a declined item)."""
+def absence_lines(art, strings, sections=None):
+    """Lines of the patient or GP letter holding any of the given strings (an absence stated for a declined item).
+    sections (letters section names of the declined questions): only lines under such a heading or naming it."""
     texts = [art.get("letter") or "", (art.get("clinician_letter") or {}).get("letter", ""),
              (art.get("patient_letter") or {}).get("letter", "")]
-    return [l for t in texts for l in t.splitlines() for x in strings if x and x in l]
+    stems = [s.lower()[:6] for s in sections or ()]
+    out = []
+    for t in texts:
+        cur = None
+        for l in t.splitlines():
+            if l.startswith("## "):
+                cur = l.lower()
+                continue
+            if sections is not None and not any(x in (cur or "") or x in l.lower() for x in stems):
+                continue
+            out += [l for x in strings if x and x in l]
+    return out
+
+
+def _declined_sections(h):
+    if not hasattr(h, "declined_rows"):
+        return []
+    return sorted({d["section"] for p in {ep.patient for ep in h.episodes.values()} for d in h.declined_rows(p)})
 
 
 def safety_lines(h, art, truth):
@@ -523,7 +555,7 @@ def safety_lines(h, art, truth):
             continue
         expect = str(sl.get("expect", "")).lower()
         if sl.get("line_id") == "DECLINED-NO-ABSENCE-LINE":   # a rule id: signed row required, then the rule itself
-            hits = absence_lines(art, truth.get("must_not_appear_in_letters", []))
+            hits = absence_lines(art, truth.get("must_not_appear_in_letters", []), _declined_sections(h))
             if _line_text("DECLINED-NO-ABSENCE-LINE") is None or hits:
                 bad.append({"line_id": sl["line_id"], "why": "unsigned" if _line_text(sl["line_id"]) is None else "absence line", "hits": hits})
             continue
@@ -663,6 +695,23 @@ def _ref_ok(h, ref):
 BOILER = re.compile(r"none recorded|not documented|No \w+ changes documented|were written in your notes", re.I)
 
 
+def _declined_letter_lines(h):
+    """The signed LT-DECLINED-* lines letters writes for a question declined in the forms log (handed over as the
+    --declined file): they carry no [Ln] tag, their source is the decline event itself."""
+    from .adapter import lt_lines
+    lt = lt_lines()
+    out = set()
+    for p in {ep.patient for ep in h.episodes.values()}:
+        for d in h.declined_rows(p):
+            for k, slot, v in (("LT-DECLINED-PT-SAFETY", "[question plain wording]", d["question_plain"]),
+                               ("LT-DECLINED-PT", "[question plain wording]", d["question_plain"]),
+                               ("LT-DECLINED-CLIN-SAFETY", "[question]", d["question"]),
+                               ("LT-DECLINED-CLIN", "[question]", d["question"])):
+                if k in lt:
+                    out.add("- " + lt[k].replace(slot, v))
+    return out
+
+
 def cites_logged(h, art):
     if art.get("tool") in ("block", "check"):
         return art["tool"] == "check" or any(r["kind"] == "block" for r in h.trace), {}
@@ -677,8 +726,10 @@ def cites_logged(h, art):
     tags = letter_tags(art["letter"])
     untagged = []
     body = art["letter"].split("\n---\n")[0]
+    declined = _declined_letter_lines(h)
     for line in body.splitlines():
-        if re.match(r"^\s*(- |\d+\. )", line) and not BOILER.search(line) and not re.search(r"\[L\d+", line):
+        if re.match(r"^\s*(- |\d+\. )", line) and not BOILER.search(line) and not re.search(r"\[L\d+", line) \
+                and line.strip() not in declined:
             untagged.append(line)
     unres = [t for t in tags if t < 1 or t > len(notes_refs) or not notes_refs[t - 1]
              or not all(_ref_ok(h, r) for r in notes_refs[t - 1])]

@@ -434,6 +434,19 @@ def s12(h, out, tamper=None):
             h.note("SYNTH-dr-12", rid, P, field, text, lid)
             notes.append(rid)
     art = letter(h, out, P, [EP], "Patient", "update to patient", {}, privacy=True, notes=notes)
+    # planted wrong moves on the built notes (off path): a final patient letter with the privacy field unset, and a
+    # letter marked privacy=true that doesn't carry the line (letters adds it to every patient letter, so the only
+    # letter that can lack it is one not to the patient: a GP letter marked privacy=true)
+    ptext = "".join(l for l in open(CASE("S12.probe_notes").replace(".toml", ".txt")) if not l.startswith("#"))
+    h.note("SYNTH-dr-12", "SYNTH-NOTE-12P", P, "probe", ptext, "P")      # logged before any letter can use it
+    seq = [x["seq"] for x in h.trace if x["kind"] == "record" and x.get("record") == "SYNTH-NOTE-12P"][-1]
+    n = len(ptext.splitlines())
+    hdr = [{"from": "clinician_record", "item": None, "event": f"trace#{seq}", "record": "SYNTH-NOTE-12P", "chain": []}] * n
+    refs = [[{"trace_seq": seq}]] * n
+    letters_probe(h, P, EP, ptext, refs, "update to patient", os.path.join(out, "probe_unset"), hdr,
+                  {"privacy": "unset"}, extra=("--final",))
+    letters_probe(h, P, EP, ptext, refs, "update to GP", os.path.join(out, "probe_missing"), hdr,
+                  {"privacy": "true"}, privacy=True, extra=("--final",))
     if tamper == "absence_line":                                 # S12-T: an absence stated for the declined item
         art = dict(art, letter=art.get("letter", "") + "\n- Allergies: none recorded\n")
     return art
@@ -450,11 +463,26 @@ def plant_gp_sensitive_line(h, out, patient, episode, item):
             f"History: {h.question_texts[item]} declined\nMedicines:\nAllergies:\nResults:\nPending:\nActions:\n")
     src = {"from": "form_answer", "item": item, "event": f"{episode}#{ev}", "chain": []}
     refs = [[{"trace_seq": ev}]] * len(text.splitlines())
-    r = run_letter_text(h, text, refs, "update to GP", out, audit=True, sources=[src] * len(text.splitlines()))
-    resp = {"accepted": r["exit"] == 0, "reason": "" if r["exit"] == 0 else r["screen"].strip(), "by": "letters"}
+    srcs = [src if ln.startswith("History:") else {"from": "header", "item": None, "event": None, "chain": []}
+            for ln in text.splitlines()]
+    return letters_probe(h, patient, episode, text, refs, "update to GP", out, srcs, {"source_item": item})
+
+
+def letters_probe(h, patient, episode, text, refs, brief, out, sources, args, privacy=None, extra=()):
+    """One planted letters build (off path), run for real with the patient's declined questions. Logged as one
+    adversarial call; a refusal is named by its signed letters line id (letters:<id>)."""
+    from .endware import run_letter_text
+    from .adapter import letters_refusal
+    r = run_letter_text(h, text, refs, brief, out, privacy=privacy, audit=True, sources=sources,
+                        declined=h.declined_rows(patient), extra=extra)
+    ok = r["exit"] == 0
+    lid, line = letters_refusal(r["screen"]) if not ok else (None, None)
+    resp = {"accepted": ok, "reason": line or ("" if ok else r["screen"].strip()), "by": "letters"}
+    if lid:
+        resp["line_id"] = lid
     h._emit("call", actor="harness", role="harness", patient=patient, episode=episode, method="letters_build",
-            args=[{"brief": "update to GP", "source_item": item}], adversarial=True, accepted=resp["accepted"],
-            response=resp, note={"claim": "CL-BUILT" if resp["accepted"] else "CL-REFUSED", "reason": ""})
+            args=[dict({"brief": brief}, **args)], adversarial=True, accepted=ok, response=resp,
+            note={"claim": "CL-BUILT" if ok else "CL-REFUSED", "reason": ""})
     return resp
 
 

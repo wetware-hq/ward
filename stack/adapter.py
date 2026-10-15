@@ -29,6 +29,37 @@ def lt_lines():
     return dict(rows)
 
 
+LETTERS_WORDING = os.path.join(os.path.dirname(LT_FILE), "letters_refusals_WORDING.md")
+
+
+def letters_signed():
+    """letters refusal lines signed by Physician (safety) and Educator (wording): id -> signed text, read from
+    letters_refusals_WORDING.md (table: id | current | signed, 'unchanged' = current; PRIVACY_BLOCKED quoted as
+    '- PRIVACY_BLOCKED <key>: "..."'). Lines the file holds back ('Held, not signed here: ...') are left out."""
+    w = open(LETTERS_WORDING, encoding="utf-8").read()
+    held = set(re.findall(r"[A-Za-z_]+", (re.search(r"Held, not signed here: ([^.]*)\.", w) or [None, ""])[1]))
+    out = {}
+    for rid, cur, signed in re.findall(r"^\| ([A-Za-z_-]+)(?: \([^)]*\))? \| ([^|]*?) \| ([^|]*?) \|", w, re.M):
+        if rid not in ("id",) and rid not in held:
+            out[rid] = cur if signed == "unchanged" else signed
+    for key, text in re.findall(r'^- PRIVACY_BLOCKED (\w+): "([^"]+)"', w, re.M):
+        out[f"PRIVACY_BLOCKED.{key}"] = text
+    return out
+
+
+def letters_refusal(screen):
+    """('letters:<id>', the signed line as shown) for the signed letters line the screen shows ({slots} free)."""
+    for rid, t in sorted(letters_signed().items(), key=lambda x: -len(x[1])):   # most specific line first
+        m = re.search(re.sub(r"\\\{[^}]*\\\}", ".+?", re.escape(t)), screen or "")
+        if m:
+            return f"letters:{rid}", m.group(0)
+    return None, None
+
+
+def letters_line_id(screen):
+    return letters_refusal(screen)[0]
+
+
 def lt(line_id, **f):
     t = lt_lines()[line_id]
     for k, v in f.items():

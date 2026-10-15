@@ -268,6 +268,29 @@ class Harness:
             out += [rid, r.get("text", "")] + ([str(r["value"])] if str(r.get("value", "")).strip() else [])
         return [x for x in out if x]
 
+    def declined_rows(self, patient):
+        """Questions the patient declined (last event a decline), as letters' --declined rows: item, section (data:
+        scenario_data [letter_sections]), safety, sensitive (stack sidecar), question, question_plain (the form text).
+        'lines' is added per letter by the caller from its own line sources."""
+        from .adapter import sensitive_ids
+        secs = _toml.load(open(os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "cases",
+                                            "scenario_data.toml"), "rb")).get("letter_sections", {})
+        out = []
+        for ep in self.episodes.values():
+            if ep.patient != patient or ep.kind != "forms":
+                continue
+            last = {}
+            for e in ep.log:
+                if e.get("type") in ("answer", "decline"):
+                    last[e["question_id"]] = e["type"]
+            env, sens = self._replayed(ep), sensitive_ids(ep.case) if isinstance(ep.case, str) else set()
+            for q, t in last.items():
+                if t == "decline" and q in secs:
+                    txt = env.q[q]["text"]
+                    out.append({"item": q, "section": secs[q], "safety": bool(env.q[q].get("safety_critical")),
+                                "sensitive": q in sens, "question": txt, "question_plain": txt})
+        return out
+
     def declined_sensitive(self, patient):
         """(question ids, question texts, question numbers) of sensitive questions the patient declined (last event a decline)."""
         ids, texts, nums = set(), set(), set()

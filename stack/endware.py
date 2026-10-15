@@ -29,7 +29,7 @@ def _ref(h, ev):
     return {"episode": ep, "event": int(n)}
 
 
-def letter(h, out, patient, episodes, reader, brief, phrases=None, privacy=None, notes=(), audit=False):
+def letter(h, out, patient, episodes, reader, brief, phrases=None, privacy=None, notes=(), audit=False, extra=()):
     """One harness export (all of the letter's episodes) -> adapter facts -> notes -> one letters build.
     audit=True: a second view of the same export (not a counted call)."""
     from . import adapter
@@ -73,19 +73,33 @@ def letter(h, out, patient, episodes, reader, brief, phrases=None, privacy=None,
     for t, r, sr in fields["Problems"]:
         add(f"- {t}", r, sr)
     # a summary line carries the full source record of every line it was worked out from
-    add("History: " + ("; ".join(t.rstrip(".") for t, _, _ in history) if history else "none recorded"),
+    add("History: " + ("; ".join(t.rstrip(".") for t, _, _ in history) if history else ""),   # empty, never an absence line
         [x for _, r, _ in history for x in r] or [head],
         {"from": "summary", "item": None, "event": None, "chain": [sr for _, _, sr in history]} if history else plain)
     for k in ("Medicines", "Allergies", "Results", "Pending", "Actions"):
         add(f"{k}:", [])
         for t, r, sr in fields[k]:
             add(f"- {t}", r, sr)
-    res = run_letter_text(h, "\n".join(lines) + "\n", refs, brief, out, privacy, audit=audit, sources=sources)
+    res = run_letter_text(h, "\n".join(lines) + "\n", refs, brief, out, privacy, audit=audit, sources=sources,
+                          declined=h.declined_rows(patient), extra=extra)
     res.update(facts=fs, wording=adapter.wording_status())
     return res
 
 
-def run_letter_text(h, text, refs, brief, outdir, privacy=None, audit=False, sources=None):
+def _declined_toml(rows, sources):
+    """letters --declined file: one [[declined]] per row; lines = the notes lines sourced from that question."""
+    def q(v):
+        return json.dumps(v, ensure_ascii=False)
+    out = []
+    for d in rows:
+        lines = [f"L{i + 1}" for i, s in enumerate(sources or []) if (s or {}).get("item") == d["item"]]
+        out.append("[[declined]]\n" + "".join(f"{k} = {q(d[k]).lower() if isinstance(d[k], bool) else q(d[k])}\n"
+                                              for k in ("item", "section", "safety", "sensitive", "question",
+                                                        "question_plain")) + f"lines = {q(lines)}\n")
+    return "\n".join(out)
+
+
+def run_letter_text(h, text, refs, brief, outdir, privacy=None, audit=False, sources=None, declined=None, extra=()):
     os.makedirs(outdir, exist_ok=True)
     with tempfile.TemporaryDirectory() as td:
         p = os.path.join(td, "notes.txt")
@@ -94,6 +108,12 @@ def run_letter_text(h, text, refs, brief, outdir, privacy=None, audit=False, sou
         cmd = [sys.executable, LETTERS, p, "--brief", brief, "--out", outdir]
         if privacy is not None:
             cmd += ["--privacy", "true" if privacy else "false"]
+        if declined:                          # questions the patient declined, from the forms log
+            dp = os.path.join(td, "declined.toml")
+            with open(dp, "w", encoding="utf-8") as f:
+                f.write(_declined_toml(declined, sources))
+            cmd += ["--declined", dp]
+        cmd += list(extra)
         r = subprocess.run(cmd, capture_output=True, text=True, cwd=os.path.dirname(LETTERS))
     letter = open(os.path.join(outdir, "letter.md")).read() if r.returncode == 0 else ""
     h._emit("endware", tool="letters", brief=brief, exit=r.returncode, **({"audit": True} if audit else {}))

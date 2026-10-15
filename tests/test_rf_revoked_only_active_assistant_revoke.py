@@ -36,7 +36,9 @@ def test_expired_guardian_never_gets_rf_revoked():
     assert not _is_revoked_line(r) and r["line_id"] == "RF-GRANT-ENDED"
 
 
-def test_cards_expired_grant_is_not_rf_revoked():
+def test_cards_expired_grant_is_not_rf_revoked(monkeypatch):
+    monkeypatch.setenv("CARDS_CLOCK", "test")                  # cards' approved clock: scenario time, set explicitly
+    monkeypatch.setenv("CARDS_SCENARIO_CLOCK", "1936-03-09")
     from stack.scenarios import CASE
     c = loader.cards()
     card = c.load(open(CASE("S13_card"), encoding="utf-8").read())

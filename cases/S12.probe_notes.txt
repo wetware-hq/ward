@@ -1,0 +1,15 @@
+# Synthetic notes for S12 planted letters probes (privacy field). Letters template order; 1939 date; SYNTH ids.
+Patient: SYNTH-P1201
+Date: 1939-06-05
+Recipients: Patient
+Question: Please review.
+Problems:
+- review
+History:
+Medicines:
+- empagliflozin 10 mg daily
+Allergies:
+Results:
+Pending:
+Actions:
+- review in 2 weeks, GP

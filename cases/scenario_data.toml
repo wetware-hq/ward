@@ -54,3 +54,8 @@ child = "SYNTH-PERSON-C13"
 
 [claims]
 trend_review_jobs = ["review_trend"]   # Physician 12:30: closing it in person claims CL-TREND-CLOSED
+
+[letter_sections]   # forms question id -> letters section a decline is written under (letters SECTIONS)
+allergy_any = "allergies"
+allergy_reaction_severe = "allergies"
+pregnant_possible = "background"
