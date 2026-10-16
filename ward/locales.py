@@ -14,18 +14,25 @@ PENDING_WORDING = "PENDING WORDING"
 LEGAL_TERM_SOURCE = {"au": "forms/messages.py RELATIONSHIP['sdm']"}
 
 
-def pack_exists(pack):
-    """True when letters is configured for this pack: letters/config/site.toml names the locale and its profile
-    folder exists (or LETTERS_SITE_PROFILE gives the folder). No pack folder name is assumed."""
+def pack_dir(pack, letters_dir=None):
+    """The letters site-profile folder for this pack, from letters/config/site.toml (or LETTERS_SITE_PROFILE),
+    or None when letters isn't configured for it. No pack folder name is assumed."""
     import tomllib
-    cfg = os.path.join(WORKSPACE, "letters", "config", "site.toml")
-    if not os.path.isfile(cfg):
-        return False
+    root = letters_dir or os.path.join(WORKSPACE, "letters")
+    cfg = os.path.join(root, "config", "site.toml")
+    if not pack or not os.path.isfile(cfg):
+        return None
     c = tomllib.load(open(cfg, "rb"))
     d = os.environ.get("LETTERS_SITE_PROFILE") or c.get("profile", "")
     if not d or c.get("locale") != pack:
-        return False
-    return os.path.isdir(d if os.path.isabs(d) else os.path.join(WORKSPACE, "letters", d))
+        return None
+    d = d if os.path.isabs(d) else os.path.join(root, d)
+    return d if os.path.isdir(d) else None
+
+
+def pack_exists(pack):
+    """True when letters is configured for this pack (see pack_dir)."""
+    return pack_dir(pack) is not None
 
 
 LANG_CODES = {"english": "en", "german": "de", "french": "fr"}

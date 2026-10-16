@@ -430,8 +430,8 @@ class Harness:
         import glob
         ep = self.episodes[episode_id]
         rel = (self.person_grants.get((ep.patient, person)) or {}).get("rel")
-        packs = [_toml.load(open(f, "rb")) for f in sorted(glob.glob(os.path.join(
-            os.path.dirname(endware_letters()), "locale", self.pack or "", "*_view.toml")))]
+        pd = locales.pack_dir(self.pack, os.path.dirname(endware_letters()))    # from the letters site-profile config
+        packs = [_toml.load(open(f, "rb")) for f in sorted(glob.glob(os.path.join(pd, "*_view.toml")))] if pd else []
         pk = next((x for x in packs if rel and x.get("rel") == rel), None)
         if pk is None:
             self._emit("harness", op="guardian_view", episode=episode_id, person=person, locale_key=None, result=[])
