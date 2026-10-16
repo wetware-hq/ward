@@ -10,6 +10,9 @@ TEST_PATIENTS = frozenset((
     "SYNTH-P0101", "SYNTH-P0201", "SYNTH-P0301", "SYNTH-P0302", "SYNTH-P0401", "SYNTH-P0501", "SYNTH-P0611",
     "SYNTH-P0612", "SYNTH-P0701", "SYNTH-P0702", "SYNTH-P0801", "SYNTH-P0901", "SYNTH-P1001", "SYNTH-P1002",
     "SYNTH-P1101", "SYNTH-P1201", "SYNTH-P1401", "SYNTH-P1501", "SYNTH-PERSON-C13"))
+# wing fleet beds (wing fleets/*.toml): SYNTH-F0001.. up to the largest num_patients, plus the S16 near-twins
+FLEET_MAX_BEDS = 48
+FLEET_PATIENTS = frozenset({f"SYNTH-F{b:04d}" for b in range(1, FLEET_MAX_BEDS + 1)} | {"SYNTH-P1601", "SYNTH-P1602"})
 DATE = re.compile(r"(?<!\d)(\d{4})-\d{2}-\d{2}")
 
 
@@ -42,7 +45,7 @@ def live_guard(records):
     if not records:
         raise LiveRefused("RF-LIVE-NOT-TEST")
     for r in records:
-        if not isinstance(r, dict) or r.get("patient") not in TEST_PATIENTS:
+        if not isinstance(r, dict) or r.get("patient") not in TEST_PATIENTS | FLEET_PATIENTS:
             raise LiveRefused("RF-LIVE-NOT-TEST")
         for t in _strings(r):
             if any(not 1930 <= int(y) <= 1939 for y in DATE.findall(t)):

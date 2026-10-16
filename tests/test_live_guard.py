@@ -76,3 +76,38 @@ def test_guard_reads_ward_clock_only(monkeypatch):
     monkeypatch.delenv("WARD_CLOCK", raising=False)
     monkeypatch.setenv("ST" + "ACK_CLOCK", "test")                # the old name never opens the guard
     _refused([CLEAN], "RF-LIVE-CLOCK-NOT-TEST")
+
+
+# ---- wing fleet ids: accepted, and nothing else widened
+def _rec(pid):
+    return dict(CLEAN, patient=pid)
+
+
+def test_fleet_ids_accepted(monkeypatch):
+    monkeypatch.setenv(live.CLOCK_ENV, "test")
+    for pid in ("SYNTH-F0001", "SYNTH-F0024", "SYNTH-F0048", "SYNTH-P1601", "SYNTH-P1602"):
+        assert live.live_guard([_rec(pid)]) is None
+
+
+@pytest.mark.parametrize("pid", ["SYNTH-F0000", "SYNTH-F0049", "SYNTH-F1", "SYNTH-P1603", "PATIENT-0001", "F0001", ""])
+def test_non_fleet_ids_still_refused(monkeypatch, pid):
+    monkeypatch.setenv(live.CLOCK_ENV, "test")
+    _refused([_rec(pid)], "RF-LIVE-NOT-TEST")
+
+
+def test_fleet_id_with_non_1930s_date_refused(monkeypatch):
+    monkeypatch.setenv(live.CLOCK_ENV, "test")
+    _refused([dict(_rec("SYNTH-F0001"), date="1941-01-01")], "RF-LIVE-NOT-TEST")
+
+
+def test_fleet_set_is_exactly_beds_plus_twins():
+    assert len(live.FLEET_PATIENTS) == live.FLEET_MAX_BEDS + 2 and not live.FLEET_PATIENTS & live.TEST_PATIENTS
+    assert all(p.startswith("SYNTH-") for p in live.FLEET_PATIENTS)
+
+
+def test_fleet_max_beds_matches_wing_configs():
+    import os, pathlib, tomllib
+    d = pathlib.Path(os.environ.get("WARD_SIBLINGS_DIR", pathlib.Path(__file__).resolve().parents[2])) / "wing" / "fleets"
+    if not d.is_dir():
+        pytest.skip("wing clone not present")
+    assert max(tomllib.loads(f.read_text())["num_patients"] for f in d.glob("*.toml")) == live.FLEET_MAX_BEDS
