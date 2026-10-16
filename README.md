@@ -2,6 +2,8 @@
 
 **Overview.** ward is the full-ward integration harness for the wetware clinical tools: it runs synthetic patients through forms and orders, then through letters and figures, and scores every step. Synthetic data only (`SYNTH-` ids, 1930s dates, invented people). Not a medical device.
 
+ward is our test hospital, not a real hospital.
+
 ---
 
 ## Clinical abstract

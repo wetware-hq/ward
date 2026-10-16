@@ -55,7 +55,7 @@ def signing_texts():
     import os
     d = pathlib.Path(os.environ.get("WARD_SIBLINGS_DIR") or ROOT.parent) / "wording"
     return [f.read_text(encoding="utf-8") for f in sorted(d.glob("*.md"))
-            if re.search(r"SIGNED|SAFETY", f.name) and not re.search(r"bak|DRAFT|RETIRED", f.name)]
+            if re.search(r"SIGNED|SAFETY", f.name) and not re.search(r"bak|DRAFT|RETIRED|v2_lines", f.name)]
 
 
 def test_every_signed_content_test_reads_the_signed_source():

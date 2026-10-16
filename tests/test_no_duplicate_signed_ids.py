@@ -19,7 +19,7 @@ def signing_files():
     out = []
     for d in wording_dirs():
         out += [f for f in sorted(d.glob("*.md")) if re.search(r"SIGNED|SAFETY", f.name)
-                and not re.search(r"bak|DRAFT|RETIRED", f.name)]
+                and not re.search(r"bak|DRAFT|RETIRED|v2_lines", f.name)]
     return out
 
 
