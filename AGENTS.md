@@ -35,7 +35,7 @@ Normative rules for agents that operate or modify ward. Wording uses RFC 2119: *
 
 - `python3 -m pytest -q` **MUST** exit 0 before every commit; `scripts/bar.sh SIBLINGS` **MUST** exit 0 before a push.
 - Changes to guards in `safety_functions.toml` **MUST** be followed by `python3 scripts/mutate.py`, which **MUST** kill every mutant, and a fresh `mutation.stamp`.
-- The README Live-model status line **MUST** match the Physician-signed line in `STABILITY_BAR.md` word for word. An agent **MUST NOT** edit it to claim live sign-off.
+- The README Live-model status line **MUST** match the signed bar text word for word. An agent **MUST NOT** edit it to claim live sign-off.
 - Scoring **MUST** stay deterministic code against signed truth files; it **MUST NOT** depend on a model's judgement.
 - The adapter **MUST** stay a pure transform; status wording **MUST** come from the signed wording file.
 
