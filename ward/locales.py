@@ -15,7 +15,17 @@ LEGAL_TERM_SOURCE = {"au": "forms/messages.py RELATIONSHIP['sdm']"}
 
 
 def pack_exists(pack):
-    return os.path.isdir(os.path.join(WORKSPACE, "letters", "locale", pack))
+    """True when letters is configured for this pack: letters/config/site.toml names the locale and its profile
+    folder exists (or LETTERS_SITE_PROFILE gives the folder). No pack folder name is assumed."""
+    import tomllib
+    cfg = os.path.join(WORKSPACE, "letters", "config", "site.toml")
+    if not os.path.isfile(cfg):
+        return False
+    c = tomllib.load(open(cfg, "rb"))
+    d = os.environ.get("LETTERS_SITE_PROFILE") or c.get("profile", "")
+    if not d or c.get("locale") != pack:
+        return False
+    return os.path.isdir(d if os.path.isabs(d) else os.path.join(WORKSPACE, "letters", d))
 
 
 LANG_CODES = {"english": "en", "german": "de", "french": "fr"}
