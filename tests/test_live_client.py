@@ -79,3 +79,14 @@ def test_scripted_still_refuses_with_key(monkeypatch):
 
 def test_live_scenarios_only():
     assert set(lc.AGENTS) == set(live.LIVE_SCENARIOS) and live.SEEDS == tuple(range(9001, 9021))
+
+
+def test_reasoning_off_so_answer_fits_max_tokens(monkeypatch):
+    # a reasoning model spent all 120 tokens thinking and returned no content (LIVE 17 Oct): reasoning stays off
+    seen = {}
+    def post(body, key):
+        seen.update(body)
+        return {"model": lc.MODEL, "choices": [{"message": {"content": "{}"}}]}
+    monkeypatch.setenv(live.KEY_ENV, "x")
+    lc.make_send(1, post=post)([{"instruction": "i"}])
+    assert seen["reasoning"] == {"enabled": False} and seen["max_tokens"] == 120

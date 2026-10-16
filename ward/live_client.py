@@ -34,7 +34,7 @@ def make_send(seed, post=_post):
         key = os.environ.get(live.KEY_ENV)
         if not key:
             raise RuntimeError(live.WAITING)
-        body = {"model": MODEL, "temperature": 0, "seed": seed, "max_tokens": 120,
+        body = {"model": MODEL, "temperature": 0, "seed": seed, "max_tokens": 120, "reasoning": {"enabled": False},
                 "response_format": {"type": "json_object"},
                 "provider": {"allow_fallbacks": False},
                 "messages": [{"role": "system", "content": records[0]["instruction"]},
