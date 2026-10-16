@@ -415,3 +415,9 @@ def test_letter_lines_record_sources():
     assert [(s["from"], s["item"], s["event"]) for s in src] == [("sensitive_alert", "s", "E#1"), ("answer", "q", "E#2"),
                                                                ("interpreter", "q", "E#2"), ("status", "d", None)]
     assert adapter.letter_lines(fs, "clinician", {"q": ("q yes", "q no")}) == out
+
+
+def test_no_truth_root_is_pending_not_error(monkeypatch):
+    """No answer-file root at all: load_truth returns None (PENDING TRUTH), never a crash. Kills scorer guard@49."""
+    monkeypatch.setattr(scorer, "TRUTH_ROOT", None)
+    assert scorer.load_truth("S05-mh-screen-by-patient-agent") is None
