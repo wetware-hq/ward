@@ -429,7 +429,7 @@ def test_s14_t1_t2_fail_on_tamper_and_not_on_the_clean_run(tid, tamper, want):
 
 
 def test_s15_planted_gp_line_from_declined_sensitive_question_fails_for_now(tmp_path):
-    """letters has no refusal yet for a GP-letter line sourced from a declined sensitive question (its
+    """letters has no refusal yet for a family-doctor-letter line sourced from a declined sensitive question (its
     SENSITIVE_REFUSED is about items not on the sensitive list). Until letters adds it, this probe must fail:
     flip the assertions when letters refuses it with letters:SENSITIVE_REFUSED."""
     h, art = run(S15, s15, tmp_path)

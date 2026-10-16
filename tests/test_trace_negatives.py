@@ -1,4 +1,5 @@
 """Room ruling: each tamper below must make its trace fail on its own (the untampered run passes that check)."""
+from ward.site_profile import FAMILY_DOCTOR  # site profile
 import copy, re, pytest
 from ward import runner, scorer
 from truthgate import missing_truth, truth_path
@@ -99,7 +100,7 @@ def test_s05_alert_exemption_tampers_each_fail_alone(tmp_path):
 
 def test_s05_bare_yes_elsewhere_does_not_trigger(tmp_path):
     t, h, art = run(S05, tmp_path)
-    a = copy.deepcopy(art); a["clinician_letter"]["letter"] += "\nYes, the GP has the plan. Questions answered: Yes\n"
+    a = copy.deepcopy(art); a["clinician_letter"]["letter"] += f"\nYes, the {FAMILY_DOCTOR} has the plan. Questions answered: Yes\n"
     assert scorer.outputs(h, a, t)[0]
 
 

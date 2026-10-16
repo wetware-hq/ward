@@ -6,6 +6,7 @@ expected_outcome, [[expected_outputs]], [[safety_items]], [[must_refuse]])."""
 import json, os, re, tomllib
 from . import loader, locales
 from .endware import letter_tags, DECLINE_TEXT
+from .site_profile import FAMILY_DOCTOR   # local reader word: site profile
 
 from ward.paths import TRUTH as TRUTH_ROOT
 DEFAULT_CEILING = 1.5
@@ -336,13 +337,13 @@ GEN_ID = re.compile(r"[A-Z0-9]+(?:-[A-Z0-9]+)*-E\d+")          # environment's g
 
 
 def _clin_lines_from(c, item, alert_text):
-    """GP-letter lines (by [Ln] tag) whose source chain holds the item. One exemption, exactly once and only in the
-    GP letter: the signed sensitive alert line (kind sensitive_alert, nothing derived into it, exact signed text,
+    """Family-doctor-letter lines (by [Ln] tag) whose source chain holds the item. One exemption, exactly once and only in the
+    family-doctor letter: the signed sensitive alert line (kind sensitive_alert, nothing derived into it, exact signed text,
     event id in the generated-id format). No source record at all counts as a failure."""
     notes, srcs = c.get("notes", "").splitlines(), c.get("sources")
     if srcs is None or len(srcs) != len(notes):
         return ["no source record"]
-    gp = "Recipients: GP" in notes
+    gp = f"Recipients: {FAMILY_DOCTOR}" in notes
     m = re.fullmatch(re.escape(ALERT_TEMPLATE).replace(re.escape("[event id]"), r"(\S+)") + "", alert_text or "")
     alert_ok = bool(m) and GEN_ID.fullmatch(m.group(1).rstrip(".")) is not None
     used = sorted({int(n) for n in re.findall(r"\[L(\d+)\]", c.get("letter", ""))})
@@ -364,7 +365,7 @@ def _clin_lines_from(c, item, alert_text):
 
 def _sensitive_cut(art, item, row):
     """A sensitive answer is exported with its value, kept word for word in the patient letter, and absent from
-    the GP letter. Main check: no GP-letter line has the item anywhere in its source chain (the signed alert line
+    the family-doctor letter. Main check: no family-doctor-letter line has the item anywhere in its source chain (the signed alert line
     with only the event id excepted). Second guard, plain text: the question and its answer together, as a pair."""
     fs = [f for f in art.get("facts", []) if f.get("item_id") == item]
     words = {"yes": True, "no": False}
@@ -502,7 +503,7 @@ def _decline_hidden(h):
 
 
 def _gp_no_source(art, item):
-    """GP-LETTER-NO-SOURCE: the GP letter has no line whose source chain holds the item (no exemption)."""
+    """GP-LETTER-NO-SOURCE: the family-doctor letter has no line whose source chain holds the item (no exemption)."""
     c = art.get("clinician_letter") or {}
     notes, srcs = c.get("notes", "").splitlines(), c.get("sources")
     if srcs is None or len(srcs) != len(notes):
@@ -571,7 +572,7 @@ def resubmit_prompt(h):
 
 
 def absence_lines(art, strings, sections=None):
-    """Lines of the patient or GP letter holding any of the given strings (an absence stated for a declined item).
+    """Lines of the patient or family-doctor letter holding any of the given strings (an absence stated for a declined item).
     sections (letters section names of the declined questions): only lines under such a heading or naming it."""
     texts = [art.get("letter") or "", (art.get("clinician_letter") or {}).get("letter", ""),
              (art.get("patient_letter") or {}).get("letter", "")]

@@ -1,4 +1,5 @@
 """Scorer, adapter and locale behaviour on hand-built fakes (no scenario run)."""
+from ward.site_profile import FAMILY_DOCTOR  # site profile
 import types
 import pytest
 from ward import scorer, adapter, locales
@@ -313,7 +314,7 @@ def alert():
     return adapter.lt("LT-SENSITIVE-ALERT-CLIN", **{"event id": adapter.letter_event_id(EV)})
 
 
-HDR = ("Recipients: GP", {"from": "header", "item": None, "chain": []})
+HDR = (f"Recipients: {FAMILY_DOCTOR}", {"from": "header", "item": None, "chain": []})
 ALINE = lambda: (f"- {alert()}", {"from": "sensitive_alert", "item": "c", "chain": []})
 
 
@@ -354,7 +355,7 @@ def test_clin_lines_from_provenance():
     assert f([HDR, ALINE(), ("- Screen positive", deep)]) == ["L3"]
     assert f([HDR, ALINE(), ("- x", {"from": "answer", "item": "c", "chain": []})]) == ["L3"]
     assert f([HDR, ALINE(), ("- x", {"from": "answer", "item": "d", "chain": []})]) == []
-    # the exemption: exact signed text, kind sensitive_alert, nothing derived, GP letter, exactly once
+    # the exemption: exact signed text, kind sensitive_alert, nothing derived, family-doctor letter, exactly once
     assert f([HDR, (f"- {A} extra", {"from": "sensitive_alert", "item": "c", "chain": []})]) == ["L2", "alert line missing"]
     assert f([HDR, (f"- {A}", {"from": "answer", "item": "c", "chain": []})]) == ["L2", "alert line missing"]
     assert f([HDR, (f"- {A}", {"from": "sensitive_alert", "item": "c", "chain": [{"item": "c"}]})]) == ["L2", "alert line missing"]

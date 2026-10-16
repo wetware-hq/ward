@@ -5,6 +5,7 @@ patient wording live in <siblings>/stack_truth/<id>/ and are read only by the sc
 Cases come from forms/examples and orders/examples (read-only) or from ./cases (synthetic, documented)."""
 import os
 from .endware import letter, run_figure
+from .site_profile import FAMILY_DOCTOR as FD   # local reader word: site profile
 
 HERE = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 from ward.paths import SIBLINGS as WS
@@ -33,7 +34,7 @@ def stop_if_blocked(h, P, ep, out, figure=False):
         return None
     if figure:
         return run_figure(h, P, ep, [], "1930-01-01T00:00:00", out)
-    return letter(h, out, P, [ep], "GP", "update to GP")
+    return letter(h, out, P, [ep], FD, f"update to {FD}")
 
 
 DISPLAY_NAMES = {}       # agent id -> display name stored on the episode at grant time (synthetic)
@@ -104,7 +105,7 @@ def s02(h, out):
     dr.step(EO, tick("discharge", "SYNTH-REC-0007"))
     dr.step(EO, A("submit"))
     h.check(EO)
-    return letter(h, out, P, [EO, EF], "GP", "discharge to GP", {"chest_pain_now": ("chest pain", None)})
+    return letter(h, out, P, [EO, EF], FD, f"discharge to {FD}", {"chest_pain_now": ("chest pain", None)})
 
 
 # ---------------------------------------------------------------- S03 / S03b
@@ -120,7 +121,7 @@ def _s03(h, out, P, EO):
         ph.step(EO, tick("get_home_list", "SYNTH-RX-0001"))
         ph.step(EO, tick("reconcile", "SYNTH-RX-0002"))
         ph.step(EO, tick("counsel_patient", "SYNTH-RX-0003"))
-        return letter(h, out, P, [EO], "GP", "update to GP")
+        return letter(h, out, P, [EO], FD, f"update to {FD}")
     md = h.session("SYNTH-dr-03", "clinician", P, discipline=DISC["MED"])
     ag = h.session("SYNTH-agent-03", "clinician_agent", P, scope=(DISC["PHA"],))
     ph.step(EO, A("approve"))
@@ -132,7 +133,7 @@ def _s03(h, out, P, EO):
     ag.step(EO, tick("send_list", "SYNTH-RX-0004"))
     ph.step(EO, A("submit"))
     h.check(EO)
-    return letter(h, out, P, [EO], "GP", "update to GP", {})
+    return letter(h, out, P, [EO], FD, f"update to {FD}", {})
 
 
 def s03(h, out):
@@ -187,7 +188,7 @@ def s05(h, out, agent=None):
     dr.step(EP, A("review"))
     ph = {"mh_q1": ("feeling low on most days", None), "mh_q2": ("thoughts of harming yourself", "no thoughts of harming yourself"),
           "mh_q3": ("trouble sleeping", None)}
-    gp = letter(h, os.path.join(out, "gp"), P, [EP], "GP", "update to GP", ph)       # the counted build (answer file)
+    gp = letter(h, os.path.join(out, "gp"), P, [EP], FD, f"update to {FD}", ph)       # the counted build (answer file)
     art = letter(h, os.path.join(out, "patient"), P, [EP], "Patient", "update to patient", ph, privacy=True, audit=True)
     art["clinician_letter"] = gp                                 # scored: sensitive cut + LT-SENSITIVE-ALERT-CLIN
     return art
@@ -440,7 +441,7 @@ def s12(h, out, tamper=None):
     art = letter(h, out, P, [EP], "Patient", "update to patient", {}, privacy=True, notes=notes)
     # planted wrong moves on the built notes (off path): a final patient letter with the privacy field unset, and a
     # letter marked privacy=true that doesn't carry the line (letters adds it to every patient letter, so the only
-    # letter that can lack it is one not to the patient: a GP letter marked privacy=true)
+    # letter that can lack it is one not to the patient: a family-doctor letter marked privacy=true)
     ptext = "".join(l for l in open(CASE("S12.probe_notes").replace(".toml", ".txt")) if not l.startswith("#"))
     h.note("SYNTH-dr-12", "SYNTH-NOTE-12P", P, "probe", ptext, "P")      # logged before any letter can use it
     seq = [x["seq"] for x in h.trace if x["kind"] == "record" and x.get("record") == "SYNTH-NOTE-12P"][-1]
@@ -449,7 +450,7 @@ def s12(h, out, tamper=None):
     refs = [[{"trace_seq": seq}]] * n
     letters_probe(h, P, EP, ptext, refs, "update to patient", os.path.join(out, "probe_unset"), hdr,
                   {"privacy": "unset"}, extra=("--final",))
-    letters_probe(h, P, EP, ptext, refs, "update to GP", os.path.join(out, "probe_missing"), hdr,
+    letters_probe(h, P, EP, ptext, refs, f"update to {FD}", os.path.join(out, "probe_missing"), hdr,
                   {"privacy": "true"}, privacy=True, extra=("--final",))
     if tamper == "absence_line":                                 # S12-T: an absence stated for the declined item
         art = dict(art, letter=art.get("letter", "") + "\n- Allergies: none recorded\n")
@@ -457,19 +458,19 @@ def s12(h, out, tamper=None):
 
 
 def plant_gp_sensitive_line(h, out, patient, episode, item):
-    """Planted wrong move (off path): a GP letter whose notes carry a line sourced from a declined sensitive question.
+    """Planted wrong move (off path): a family-doctor letter whose notes carry a line sourced from a declined sensitive question.
     letters must refuse it (letters:SENSITIVE_REFUSED). The build runs for real; the result is logged as one
     adversarial call, so an accepted build is a bad action accepted and a refusal must carry the signed line."""
     from .endware import run_letter_text
     ev = [r["seq"] for r in h.trace if r.get("kind") == "call" and r.get("episode") == episode
           and ((r.get("args") or [{}])[0] or {}).get("question_id") == item][-1]
-    text = (f"Patient: {patient}\nDate: {h.clock.date().isoformat()}\nRecipients: GP\nQuestion: none\nProblems:\n"
+    text = (f"Patient: {patient}\nDate: {h.clock.date().isoformat()}\nRecipients: {FD}\nQuestion: none\nProblems:\n"
             f"History: {h.question_texts[item]} declined\nMedicines:\nAllergies:\nResults:\nPending:\nActions:\n")
     src = {"from": "form_answer", "item": item, "event": f"{episode}#{ev}", "chain": []}
     refs = [[{"trace_seq": ev}]] * len(text.splitlines())
     srcs = [src if ln.startswith("History:") else {"from": "header", "item": None, "event": None, "chain": []}
             for ln in text.splitlines()]
-    return letters_probe(h, patient, episode, text, refs, "update to GP", out, srcs, {"source_item": item})
+    return letters_probe(h, patient, episode, text, refs, f"update to {FD}", out, srcs, {"source_item": item})
 
 
 def letters_probe(h, patient, episode, text, refs, brief, out, sources, args, privacy=None, extra=()):
@@ -529,7 +530,7 @@ def s15(h, out, tamper=None):
         h._emit("call", actor="SYNTH-agent-15", role="patient_agent", patient=P, episode=EP, method="observe", args=[],
                 accepted=True, response={"pregnant_possible": "declined"}, note={"claim": "CL-OBSERVED", "reason": ""})
     art = letter(h, os.path.join(out, "patient"), P, [EP], "Patient", "update to patient", {}, privacy=True)
-    art["clinician_letter"] = letter(h, os.path.join(out, "gp"), P, [EP], "GP", "update to GP", {})
+    art["clinician_letter"] = letter(h, os.path.join(out, "gp"), P, [EP], FD, f"update to {FD}", {})
     plant_gp_sensitive_line(h, os.path.join(out, "gp-probe"), P, EP, "pregnant_possible")   # letters:SENSITIVE_REFUSED
     return art
 

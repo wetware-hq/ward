@@ -1,0 +1,5 @@
+# TEST site profile (synthetic). Local names live here, never in the core. The family-doctor reader token
+# matches the letters locale pack the ward runs against today.
+[family_doctor]
+reader = "GP"
+cite = "TEST synthetic value: letters locale pack reader_role"

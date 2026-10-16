@@ -1,5 +1,5 @@
 """Ward -> letters wiring (landed letters features): the declined questions go to letters as --declined TOML built
-from the forms log; a patient letter carries the signed declined line and never an absence line; a GP letter with a
+from the forms log; a patient letter carries the signed declined line and never an absence line; a family-doctor letter with a
 line sourced from a declined sensitive question is refused with SENSITIVE_DECLINED_REFUSED; letters refusals are
 named by their signed letters id (letters_refusals_WORDING.md + _SAFETY.md)."""
 import re, tempfile
