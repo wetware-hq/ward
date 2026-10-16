@@ -58,7 +58,7 @@ def scripted_note(rec, reason=""):
     return {"claim": claim_of(rec), "reason": reason or ""}
 
 
-# Signed in the room; the text comes only from the signing files once Educator adds the row (never written here).
+# Signed; the text comes only from the signing files once Educator adds the row (never written here).
 WHO = {"patient": "patient", "patient_agent": "patient's agent", "guardian": "guardian", "clinician": "clinician in person"}
 
 

@@ -15,6 +15,15 @@ J-GP       = '\bGPs?\b'
 J-CURRENCY = 'A\$|\bAUD\b'
 J-JOBTITLE = '\b(VMO|CMO|CNC|CNE|JMO|Nurse Unit Manager|RMO|SRMO)\b(?! *=)'
 
+# Prompt leak (check id SCAN-PROMPT-LEAK, one sub-id per group). Signer role words such as 'Physician' are allowed.
+"SCAN-PROMPT-LEAK/names"     = '\bBI[O] (Engineer|Physician|Patient|Educator|Director|Scientist)\b|\bMasterchief\b|\bGrok Bot\b|\bthe room\b|\bCaptain ?Cook\b|(?i:captaincook)'
+"SCAN-PROMPT-LEAK/persona"   = '\bYou are\b|(?i:\byou are a\b)|(?i:\bsystem prompt\b)|\bsubagent\b|\bexecutor\b'
+"SCAN-PROMPT-LEAK/paths"     = '/hom[e]/box\b|/workspac[e]/tmp\b'
+"SCAN-PROMPT-LEAK/tokens"    = '\b(WARD_GH_TOKEN|WARD_MODEL_API_KEY|MODAL)\b'
+"SCAN-PROMPT-LEAK/people"    = '\b(Mathew|Chu)\b|(?i:mchu001)'
+"SCAN-PROMPT-LEAK/email"     = '(?<![\w.+-])(?!hellowetware@gmail\.com\b)[\w.+-]+@[A-Za-z0-9-]+\.[A-Za-z0-9.-]+'
+"SCAN-PROMPT-LEAK/directive" = 'SYSTEM DIRECTIVE|%PURGE'
+
 [planted]
 J-COUNTRY  = "Australia"
 J-STATE    = "NSW"
@@ -27,9 +36,27 @@ J-GP       = "GP"
 J-CURRENCY = "A$5"
 J-JOBTITLE = "VMO"
 
+"SCAN-PROMPT-LEAK/names"     = "signed in the room"
+"SCAN-PROMPT-LEAK/persona"   = "system prompt"
+"SCAN-PROMPT-LEAK/paths"     = "\u002Fhome\u002Fbox\u002Fx"
+"SCAN-PROMPT-LEAK/tokens"    = "WARD_GH_TOKEN"
+"SCAN-PROMPT-LEAK/people"    = "mchu001"
+"SCAN-PROMPT-LEAK/email"     = "someone@example.org"
+"SCAN-PROMPT-LEAK/directive" = "%PURGE"
+
 [exceptions]
 # ids only: signed fail/check ids that keep a local word until the next version
 ids = ['\bGP-LETTER-NO-SOURCE\b']
+
+[[exceptions.term]]
+term = "WARD_MODEL_API_KEY"
+path = "^AGENTS\\.md$"
+reason = "name of the environment variable the live guard reads and every scripted run unsets; the value is never stored or printed (1 uses)"
+
+[[exceptions.term]]
+term = "WARD_MODEL_API_KEY"
+path = "^README\\.md$"
+reason = "name of the environment variable the live guard reads and every scripted run unsets; the value is never stored or printed (2 uses)"
 
 [[exceptions.term]]
 term = "GP"
@@ -50,3 +77,53 @@ reason = "synthetic notes in the example profile's voice; letters input whose ow
 term = "GP"
 path = "^examples/site_profile_TEST_EXAMPLE\\.toml$"
 reason = "example site profile: the local reader word is its data (1 uses)"
+
+[[exceptions.term]]
+term = "WARD_MODEL_API_KEY"
+path = "^scripts/bar\\.sh$"
+reason = "name of the environment variable the live guard reads and every scripted run unsets; the value is never stored or printed (2 uses)"
+
+[[exceptions.term]]
+term = "WARD_MODEL_API_KEY"
+path = "^scripts/key_probe\\.py$"
+reason = "name of the environment variable the live guard reads and every scripted run unsets; the value is never stored or printed (3 uses)"
+
+[[exceptions.term]]
+term = "WARD_MODEL_API_KEY"
+path = "^scripts/live_run\\.py$"
+reason = "name of the environment variable the live guard reads and every scripted run unsets; the value is never stored or printed (1 uses)"
+
+[[exceptions.term]]
+term = "WARD_MODEL_API_KEY"
+path = "^tests/conftest\\.py$"
+reason = "name of the environment variable the live guard reads and every scripted run unsets; the value is never stored or printed (1 uses)"
+
+[[exceptions.term]]
+term = "WARD_MODEL_API_KEY"
+path = "^tests/test_key_probe\\.py$"
+reason = "name of the environment variable the live guard reads and every scripted run unsets; the value is never stored or printed (4 uses)"
+
+[[exceptions.term]]
+term = "WARD_MODEL_API_KEY"
+path = "^tests/test_live_guard\\.py$"
+reason = "name of the environment variable the live guard reads and every scripted run unsets; the value is never stored or printed (1 uses)"
+
+[[exceptions.term]]
+term = "WARD_MODEL_API_KEY"
+path = "^tests/test_no_model_key\\.py$"
+reason = "name of the environment variable the live guard reads and every scripted run unsets; the value is never stored or printed (6 uses)"
+
+[[exceptions.term]]
+term = "WARD_MODEL_API_KEY"
+path = "^ward/live\\.py$"
+reason = "name of the environment variable the live guard reads and every scripted run unsets; the value is never stored or printed (3 uses)"
+
+[[exceptions.term]]
+term = "WARD_MODEL_API_KEY"
+path = "^ward/live_client\\.py$"
+reason = "name of the environment variable the live guard reads and every scripted run unsets; the value is never stored or printed (1 uses)"
+
+[[exceptions.term]]
+term = "You are"
+path = "^ward/live_client\\.py$"
+reason = "instruction text the live client sends to the pinned model for a synthetic test form (functional, not a persona of this project) (2 uses)"

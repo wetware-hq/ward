@@ -106,7 +106,7 @@ def run_live(sid, run_one):
             "useful": useful, "ci95": (lo, hi), "fail_upper": failure_upper_bound(len(SEEDS) - useful, len(SEEDS))}
 
 
-# ---- scripted agent loop (Mathew veto 15 Oct 17:07: no key, no live model until after stable + push).
+# ---- scripted agent loop (owner veto 15 Oct 17:07: no key, no live model until after stable + push).
 SCRIPTED = "SCRIPTED"            # reported as SCRIPTED, never LIVE: the scenario's own deterministic agent script
 REPLAY_SEEDS = SEEDS[:3]
 
