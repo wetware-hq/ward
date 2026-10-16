@@ -1,0 +1,3 @@
+# Which site profile the ward loads (configuration, not code). Override with WARD_SITE_PROFILE.
+# The shipped value points at the synthetic example; a real site points it at its own signed profile.
+profile = "examples/site_profile_TEST_EXAMPLE.toml"

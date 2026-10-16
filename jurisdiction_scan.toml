@@ -30,5 +30,23 @@ J-JOBTITLE = "VMO"
 [exceptions]
 # ids only: signed fail/check ids that keep a local word until the next version
 ids = ['\bGP-LETTER-NO-SOURCE\b']
-# site-profile data and synthetic notes written in the TEST profile's voice (letters input)
-paths = ['^data/site_profiles/', '^cases/']
+
+[[exceptions.term]]
+term = "GP"
+path = "^cases/S12\\.notes\\.txt$"
+reason = "synthetic notes in the example profile's voice; letters input whose owner word the pinned letters build parses (1 uses)"
+
+[[exceptions.term]]
+term = "GP"
+path = "^cases/S12\\.probe_notes\\.txt$"
+reason = "synthetic notes in the example profile's voice; letters input whose owner word the pinned letters build parses (1 uses)"
+
+[[exceptions.term]]
+term = "GP"
+path = "^cases/scenario_data\\.toml$"
+reason = "synthetic notes in the example profile's voice; letters input whose owner word the pinned letters build parses (4 uses)"
+
+[[exceptions.term]]
+term = "GP"
+path = "^examples/site_profile_TEST_EXAMPLE\\.toml$"
+reason = "example site profile: the local reader word is its data (1 uses)"

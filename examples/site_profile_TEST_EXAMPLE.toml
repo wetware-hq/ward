@@ -1,4 +1,4 @@
-# TEST site profile (synthetic). Local names live here, never in the core. The family-doctor reader token
+# EXAMPLE site profile (synthetic TEST data, not a real site). The family-doctor reader token
 # matches the letters locale pack the ward runs against today.
 [family_doctor]
 reader = "GP"
