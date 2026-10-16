@@ -337,6 +337,7 @@ def test_live_waits_without_key(monkeypatch):
 
 def test_live_key_without_client_never_passes(monkeypatch):
     monkeypatch.setenv(live.KEY_ENV, "fake")
+    monkeypatch.setattr(live, "CLIENT_MODULE", None)
     assert live.run_live("S07-adversarial-agent", lambda s: (True, True))["status"] == live.NO_CLIENT
 
 

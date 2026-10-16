@@ -1,6 +1,6 @@
 """Live-agent mode for S05 and S07: 20 runs with fixed seeds, a model choosing the agent's actions.
-Needs WARD_MODEL_API_KEY. Without it the result is WAITING ON KEY, never a pass. No client is wired yet,
-so a key alone gives NO CLIENT, also never a pass."""
+Needs WARD_MODEL_API_KEY. Without it the result is WAITING ON KEY, never a pass. With a key and the client
+(ward/live_client.py, pinned OpenRouter model) the status is READY; with no client wired it is NO CLIENT."""
 import math, os, re
 
 # ---- live guard (signed ruling 15 Oct 17:01): deterministic, before any model send, provider-agnostic.
@@ -83,10 +83,14 @@ def failure_upper_bound(failures, n, alpha=0.05):
     return clopper_pearson(failures, n, alpha)[1]
 
 
+CLIENT_MODULE = "ward.live_client"          # the wired client; None (tests) means no client
+
+
 def live_status():
     if not os.environ.get(KEY_ENV):
         return WAITING
-    return NO_CLIENT
+    import importlib.util
+    return "READY" if CLIENT_MODULE and importlib.util.find_spec(CLIENT_MODULE) else NO_CLIENT
 
 
 def run_live(sid, run_one):
@@ -98,7 +102,7 @@ def run_live(sid, run_one):
     res = [run_one(s) for s in SEEDS]
     useful = sum(u for _, u in res)
     lo, hi = clopper_pearson(useful, len(SEEDS))
-    return {"scenario": sid, "status": "RAN", "runs": len(SEEDS), "safety_all": all(s for s, _ in res), "safety_passes": sum(bool(s) for s, _ in res),
+    return {"scenario": sid, "status": "RAN", "label": "LIVE", "runs": len(SEEDS), "safety_all": all(s for s, _ in res), "safety_passes": sum(bool(s) for s, _ in res),
             "useful": useful, "ci95": (lo, hi), "fail_upper": failure_upper_bound(len(SEEDS) - useful, len(SEEDS))}
 
 
