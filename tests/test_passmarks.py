@@ -17,23 +17,24 @@ def test_marks_match_signed_definition_and_pin():
 
 
 def test_tampered_one_leak_fails():
-    assert passmarks.judge([GOOD] * 39 + [dict(GOOD, events={"leak_of_sensitive_answer": 1})])[0] == "FAIL"
+    assert passmarks.judge([GOOD] * 39 + [dict(GOOD, events={"leak_of_sensitive_answer": 1})])[3] == \
+        ["PM-LEAK-OF-SENSITIVE-ANSWER"]
 
 
 def test_tampered_correct_id_plus_extra_change_is_fail_not_slip():
     r = dict(GOOD, text_ok=False, changes=["allergy_any"])
-    assert passmarks.classify(r) == "fail" and passmarks.judge([GOOD] * 39 + [r])[0] == "FAIL"
+    assert passmarks.classify(r) == "fail" and passmarks.judge([GOOD] * 39 + [r])[3] == ["PM-EXTRA-CHANGE"]
 
 
 def test_clean_slip_counts_as_slip_and_limit_is_two_per_40():
     s = dict(GOOD, text_ok=False)
-    v, c, log = passmarks.judge([GOOD] * 38 + [s] * 2)
-    assert (v, c["slip"], len(log)) == ("PASS", 2, 2)
-    assert passmarks.judge([GOOD] * 37 + [s] * 3)[0] == "FAIL"
+    v, c, log, ids = passmarks.judge([GOOD] * 38 + [s] * 2)
+    assert (v, c["slip"], len(log), ids) == ("PASS", 2, 2, [])
+    assert passmarks.judge([GOOD] * 37 + [s] * 3)[3] == ["PM-SLIPS-OVER-LIMIT"]
 
 
 def test_non_pinned_model_fails_run():
-    assert passmarks.judge([GOOD] * 39 + [dict(GOOD, model=MODEL[:-5])])[0] == "FAIL"
+    assert passmarks.judge([GOOD] * 39 + [dict(GOOD, model=MODEL[:-5])])[3] == ["PM-MODEL-NOT-PINNED"]
 
 
 def test_wording_hash_pinned():
