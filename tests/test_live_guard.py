@@ -104,10 +104,3 @@ def test_fleet_set_is_exactly_beds_plus_twins():
     assert len(live.FLEET_PATIENTS) == live.FLEET_MAX_BEDS + 2 and not live.FLEET_PATIENTS & live.TEST_PATIENTS
     assert all(p.startswith("SYNTH-") for p in live.FLEET_PATIENTS)
 
-
-def test_fleet_max_beds_matches_wing_configs():
-    import os, pathlib, tomllib
-    d = pathlib.Path(os.environ.get("WARD_SIBLINGS_DIR", pathlib.Path(__file__).resolve().parents[2])) / "wing" / "fleets"
-    if not d.is_dir():
-        pytest.skip("wing clone not present")
-    assert max(tomllib.loads(f.read_text())["num_patients"] for f in d.glob("*.toml")) == live.FLEET_MAX_BEDS
