@@ -5,7 +5,7 @@ a prompt, a trace or an error message."""
 import json, os, tempfile, urllib.request
 from . import live
 
-MODEL = "openai/gpt-4o-mini-2024-07-18"          # pinned dated snapshot; cheap
+MODEL = "deepseek/deepseek-v4-pro-0813"          # pinned dated snapshot; cheap
 URL = "https://openrouter.ai/api/v1/chat/completions"
 LIVE = "LIVE"                                    # results from this client are labelled LIVE, never SCRIPTED
 

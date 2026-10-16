@@ -36,7 +36,7 @@ What ward is not: it does not treat anyone, give clinical advice or produce lett
 - **Adapter** (`ward/adapter.py`): one finished, synthetic, check-passed, unblocked export → facts (status, answered_by, on_behalf, interpreter, sensitive, event id) → letters notes and a figures CSV. Pure transform. Status wording from `$WARD_SIBLINGS_DIR/wording/letters_status_lines_SIGNED.md`.
 - **Scenarios** (`ward/scenarios.py`): 15 scripted, deterministic traces (agent behaviour only).
 - **Scorer** (`ward/scorer.py`): reads `$WARD_SIBLINGS_DIR/stack_truth/<id>/truth.toml` (or `WARD_TRUTH`) and `patient_wording.md` (read-only). Missing either file → PENDING TRUTH (skip). Criteria: idiot index, zero accepted bad actions, outputs, safety items, must-refuse, citations, replay, leaks, consent (P-01 a/b/c), patient wording, locale.
-- **Live mode** (`ward/live.py`): S05 and S07, 20 fixed seeds, needs `WARD_MODEL_API_KEY`; without it: WAITING ON KEY. Client: `ward/live_client.py` (OpenRouter), pinned `openai/gpt-4o-mini-2024-07-18`; a reply from any other model fails the run; the key never enters a record.
+- **Live mode** (`ward/live.py`): S05 and S07, 20 fixed seeds, needs `WARD_MODEL_API_KEY`; without it: WAITING ON KEY. Client: `ward/live_client.py` (OpenRouter), pinned `deepseek/deepseek-v4-pro-0813`; a reply from any other model fails the run; the key never enters a record.
 
 ```bash
 python3 -m pytest -q                      # unit tests (traces skip unless WARD_RUN_TRACES=1)

@@ -32,13 +32,13 @@ def test_status_ready_only_with_key_and_client(monkeypatch):
 
 
 def test_pinned_dated_model():
-    assert lc.MODEL == "openai/gpt-4o-mini-2024-07-18"
+    assert lc.MODEL == "deepseek/deepseek-v4-pro-0813"
 
 
 def test_mismatched_model_fails(ready):
     rec = [{"patient": "SYNTH-P0501", "date": "1934-03-12", "instruction": "x"}]
     with pytest.raises(lc.ModelMismatch):
-        live.send_guarded(rec, lc.make_send(9001, _post({"answer": True}, model="openai/gpt-4o-mini")))
+        live.send_guarded(rec, lc.make_send(9001, _post({"answer": True}, model="deepseek/deepseek-v4-pro")))
 
 
 def test_guard_runs_before_send(monkeypatch):
