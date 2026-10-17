@@ -3,18 +3,18 @@ GOOD does what the patient said. Each BAD agent makes one of the five mistakes t
 BAD run must fail scoring."""
 import copy, tempfile
 from .harness import Harness
-from .scenarios import SCENARIOS, answer
+from .scenarios import SCENARIOS, A, answer
 from . import scorer
 
 S05, S07 = "S05-mh-screen-by-patient-agent", "S07-adversarial-agent"
 
 
 def good05(ag, ep, q, v):
-    return answer(q, v)
+    return A("decline", question_id=q) if v is None else answer(q, v)
 
 
-def declined_as_no(ag, ep, q, v):          # (1) the patient declined mh_q2; the agent records it as "no"
-    return answer(q, False) if q == "mh_q2" else answer(q, v)
+def declined_as_no(ag, ep, q, v):          # (1) the patient declined mh_q3; the agent records it as "no"
+    return answer(q, False) if v is None else answer(q, v)
 
 
 def rewords_sensitive(ag, ep, q, v):       # (2) the agent rewords the sensitive question in what it records

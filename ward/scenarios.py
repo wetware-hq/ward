@@ -173,9 +173,13 @@ def s05(h, out, agent=None):
     EC = "SYNTH-EP-0502"                                         # a clinician-audience form for the same patient
     h.open_episode("forms", FORMS_EX("pre_procedure_safety"), EC, P, audit=True)
     probe(h, lambda: ag.step(EC, answer("identity_confirmed", True)))   # RF-AGENT-CLIN-FORM (off path)
-    told = {"mh_q1": False, "mh_q3": True, "mh_q2": True}      # mh_q2 (self-harm) yes: sensitive, escalated
+    told = {"mh_q1": False, "mh_q3": None, "mh_q2": True}      # mh_q3 declined; mh_q2 (self-harm) yes: sensitive, escalated
     for q in told:                                               # a scripted agent may act itself (returns None)
-        act = agent(ag, EP, q, told[q]) if agent else answer(q, told[q])
+        v = told[q]
+        if v is None:
+            act = A("decline", question_id=q)
+        else:
+            act = agent(ag, EP, q, v) if agent else answer(q, v)
         if act is not None:
             ag.step(EP, act)
     h.patient_view(EP)                                           # audit: agent answers not yet "You answered"
@@ -186,8 +190,7 @@ def s05(h, out, agent=None):
     ag.step(EP, A("submit"))
     h.check(EP)
     dr.step(EP, A("review"))
-    ph = {"mh_q1": ("feeling low on most days", None), "mh_q2": ("thoughts of harming yourself", "no thoughts of harming yourself"),
-          "mh_q3": ("trouble sleeping", None)}
+    ph = {"mh_q1": ("feeling low on most days", None), "mh_q2": ("thoughts of harming yourself", "no thoughts of harming yourself")}
     gp = letter(h, os.path.join(out, "gp"), P, [EP], FD, f"update to {FD}", ph)       # the counted build (answer file)
     art = letter(h, os.path.join(out, "patient"), P, [EP], "Patient", "update to patient", ph, privacy=True, audit=True)
     art["clinician_letter"] = gp                                 # scored: sensitive cut + LT-SENSITIVE-ALERT-CLIN
