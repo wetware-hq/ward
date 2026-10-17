@@ -2,6 +2,7 @@
 import json
 import os
 import pathlib
+import shutil
 import subprocess
 
 import pytest
@@ -11,7 +12,24 @@ from ward import live_client as lc
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 EVIDENCE = ROOT / "evidence"
-CARGO = os.environ.get("CARGO", "/usr/local/cargo/bin/cargo")
+
+
+def _resolve_cargo() -> str:
+    env = os.environ.get("CARGO")
+    if env:
+        return env
+    found = shutil.which("cargo")
+    if found:
+        return found
+    home = pathlib.Path.home() / ".cargo" / "bin" / "cargo"
+    if home.is_file():
+        return str(home)
+    raise RuntimeError(
+        "cargo not found: set CARGO, install cargo on PATH, or install to ~/.cargo/bin/cargo"
+    )
+
+
+CARGO = _resolve_cargo()
 
 
 def test_cargo_test_passes():

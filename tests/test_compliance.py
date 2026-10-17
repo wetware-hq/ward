@@ -75,3 +75,19 @@ def test_parse_three_state_unit():
     assert compliance.parse_three_state({"decision": "no"}) == "no"
     with pytest.raises(BadReply):
         compliance.parse_three_state({"decision": "nope"})
+
+
+def test_apply_decision_routes():
+    spec = compliance.prompt_spec(PROMPT)
+    yes = compliance.apply_decision("yes", PROMPT)
+    assert yes["route"] == "allow" and yes["human_visible"] is None
+    assert yes["resource_id"] == spec["resource_id"]
+    no = compliance.apply_decision("no", PROMPT)
+    assert no["route"] == "deny"
+    abstain = compliance.apply_decision("abstain", PROMPT)
+    assert abstain["route"] == "human" and abstain["human_visible"] == compliance.abstain_human_label()
+
+
+def test_apply_decision_rejects_unknown_state():
+    with pytest.raises(BadReply):
+        compliance.apply_decision("maybe", PROMPT)

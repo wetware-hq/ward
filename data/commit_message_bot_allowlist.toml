@@ -1,0 +1,7 @@
+# Bot/service mailbox addresses allowed only in git commit messages (SCAN-PROMPT-LEAK/email).
+# Does not apply to tracked file contents. Each entry must cite the commit that introduced the footer.
+
+[[addresses]]
+address = "cursoragent@cursor.com"
+citation = "squash merge c8f6c457"
+reason = "Cursor Agent automation Co-authored-by trailer; service/bot mailbox, not a person"

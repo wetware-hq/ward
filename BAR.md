@@ -13,3 +13,9 @@ Entries here describe what an optional check proves and what it does **not** pro
 **Proves:** lab resource and tool decisions accept only structured `yes` / `no` / `abstain` model input (reasoning off, schema-constrained); abstain routes to a labelled human surface and is never coerced to deny; malformed replies fail the call.
 
 **Does not prove:** that the model’s yes/no is correct, that humans act on abstain labels, or regulatory compliance outside this harness.
+
+## jurisdiction scan (`jurisdiction_scan.toml`)
+
+**Log (2026-10-17):** Squash merge `c8f6c457` permanently carries the Cursor Agent `Co-authored-by` trailer address (`cursoragent@cursor.com`) in git history. That address is a service/bot mailbox, not a person. History is deliberately not rewritten. The forward-only fix is an explicit cited allowlist in `data/commit_message_bot_allowlist.toml` used only when scanning commit messages; tracked file contents still fail on that address. Any other email in a commit message still fails.
+
+**commit_base:** `d70b159` — only commits after this point are scanned; allowlisted bot addresses apply only to the email check in commit bodies.

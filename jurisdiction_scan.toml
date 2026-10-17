@@ -127,3 +127,13 @@ reason = "name of the environment variable the live guard reads and every script
 term = "You are"
 path = "^ward/live_client\\.py$"
 reason = "instruction text the live client sends to the pinned model for a synthetic test form (functional, not a persona of this project) (2 uses)"
+
+[[exceptions.term]]
+term = "cursoragent@cursor.com"
+path = "^data/commit_message_bot_allowlist\\.toml$"
+reason = "cited allowlist entry for commit-message bot addresses only; still forbidden in all other tracked paths (1 use)"
+
+[[exceptions.term]]
+term = "cursoragent@cursor.com"
+path = "^BAR\\.md$"
+reason = "stability bar log cites the permanent c8f6c457 Co-authored-by bot allowlist entry (1 use)"
