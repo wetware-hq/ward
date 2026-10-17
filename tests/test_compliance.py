@@ -32,6 +32,29 @@ def test_prompts_live_in_data_file():
     assert "SYNTH-LAB" in spec["resource_id"] and spec["instruction"]
 
 
+def test_prompt_spec_unknown_id_raises_key_error():
+    unknown = "synth_compliance_prompt_not_in_toml"
+    with pytest.raises(KeyError, match=unknown):
+        compliance.prompt_spec(unknown)
+
+
+def test_prompt_spec_missing_instruction_raises_key_error(monkeypatch):
+    pid = "synth_prompt_no_instruction_field"
+
+    def fake_load():
+        return {"prompts": {pid: {"resource_id": "SYNTH-LAB-1", "tool_id": "SYNTH-TOOL-1"}}}
+
+    monkeypatch.setattr(compliance, "_load", fake_load)
+    with pytest.raises(KeyError, match=pid):
+        compliance.prompt_spec(pid)
+
+
+def test_prompt_spec_valid_id_returns_spec_with_instruction():
+    spec = compliance.prompt_spec(PROMPT)
+    assert isinstance(spec, dict)
+    assert isinstance(spec["instruction"], str) and spec["instruction"].strip()
+
+
 def test_abstain_routes_human_with_visible_label(ready):
     send = make_compliance_send(9001, post=_post("abstain"))
     out = compliance.decide(send, PROMPT, PATIENT, DATE)

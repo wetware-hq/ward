@@ -32,8 +32,21 @@ def _resolve_cargo() -> str:
 CARGO = _resolve_cargo()
 
 
-def test_cargo_test_passes():
-    r = subprocess.run([CARGO, "test", "-q"], cwd=EVIDENCE, capture_output=True, text=True)
+def _cargo_env(cargo_target_dir):
+    env = os.environ.copy()
+    if cargo_target_dir is not None:
+        env["CARGO_TARGET_DIR"] = str(cargo_target_dir)
+    return env
+
+
+@pytest.fixture(scope="module")
+def cargo_target_dir(tmp_path_factory):
+    return tmp_path_factory.mktemp("ward_evidence_cargo_target")
+
+
+def test_cargo_test_passes(cargo_target_dir):
+    r = subprocess.run([CARGO, "test", "-q"], cwd=EVIDENCE, capture_output=True, text=True,
+                       env=_cargo_env(cargo_target_dir))
     assert r.returncode == 0, r.stdout + r.stderr
 
 
@@ -58,7 +71,7 @@ def test_live_client_emits_full_params(monkeypatch):
     assert not any(x in blob for x in ("Bearer", "Authorization", "sk-or-test"))
 
 
-def test_pack_cli_round_trip(tmp_path, monkeypatch):
+def test_pack_cli_round_trip(tmp_path, monkeypatch, cargo_target_dir):
     monkeypatch.setenv(live.KEY_ENV, "sk-or-test")
     trace = []
     send = lc.make_send(9001, post=lambda b, k: {"model": lc.MODEL, "choices": [{"message": {"content": "{}"}}]},
@@ -68,12 +81,14 @@ def test_pack_cli_round_trip(tmp_path, monkeypatch):
     trace_path.write_text("\n".join(json.dumps(x, sort_keys=True) for x in trace) + "\n")
     bundle_path = tmp_path / "bundle.json"
     withdrawn = ROOT / "data" / "consent_withdrawn.toml"
+    env = _cargo_env(cargo_target_dir)
     pack = subprocess.run(
         [CARGO, "run", "-q", "--bin", "ward-evidence", "--", "pack", str(trace_path), "--withdrawn", str(withdrawn)],
         cwd=EVIDENCE,
         capture_output=True,
         text=True,
         check=True,
+        env=env,
     )
     bundle_path.write_text(pack.stdout)
     verify = subprocess.run(
@@ -81,5 +96,6 @@ def test_pack_cli_round_trip(tmp_path, monkeypatch):
         cwd=EVIDENCE,
         capture_output=True,
         text=True,
+        env=env,
     )
     assert verify.returncode == 0, verify.stderr
