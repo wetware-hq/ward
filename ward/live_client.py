@@ -181,7 +181,7 @@ def run_one_records(sid, truth, post=_post):
             art = fn(h, tempfile.mkdtemp(), agent=AGENTS[sid](sid, seed, make_send(seed, post), log))
         except (ModelMismatch, BadReply, live.LiveRefused) as e:
             err = type(e).__name__
-        hook = Harness.LIVE_WRONG_PATIENT_HOOK
+        hook = Harness.POST_GUARD_WRONG_PATIENT_WRITE_HOOK
         if hook is not None:
             hook(h)
         return live_records.records(sid, seed, h, log, art, truth, err)

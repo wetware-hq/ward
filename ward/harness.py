@@ -87,7 +87,7 @@ class Handle:
 
 class Harness:
     NOTE_HOOK = None      # tests only: callable(record) -> reason text for a scripted actor's note, or None
-    LIVE_WRONG_PATIENT_HOOK = None   # tests only: callable(harness) after a LIVE run; plants a downstream write record
+    POST_GUARD_WRONG_PATIENT_WRITE_HOOK = None   # tests only: after LIVE run; plants wrong-patient write for scorer (not guard)
     def __init__(self, scenario_id, seed, start="1937-03-01T08:00", pack="au", language="en"):
         self.scenario_id, self.seed, self.pack, self.language = scenario_id, seed, pack, locales.lang_code(language)
         self.rng = random.Random(seed)
@@ -170,20 +170,21 @@ class Harness:
                    note={"claim": "CL-EXPORTED" if r["accepted"] else "CL-REFUSED", "reason": ""})
         return r
 
-    def plant_live_wrong_patient_write(self, episode_id, handle_patient, actor="SYNTH-live-seam"):
+    def plant_post_guard_wrong_patient_write(self, episode_id, handle_patient, actor="SYNTH-post-guard-seam"):
         """Harness-only LIVE test seam: record an accepted agent call whose handle patient does not own the episode.
-        Simulates middleware downstream of harness binding (RF-NOT-YOURS) and the live guard; _call is not relaxed.
+        Does not exercise the live guard; it plants a write the scorer must flag after guard/binding already refused
+        the real attack. Simulates middleware fault downstream of RF-NOT-YOURS; _call is not relaxed for real traffic.
         Only when WARD_CLOCK=test (same gate as live.send_guarded)."""
         if os.environ.get("WARD_CLOCK") != "test":
-            raise RuntimeError("plant_live_wrong_patient_write refused: WARD_CLOCK is not test")
+            raise RuntimeError("plant_post_guard_wrong_patient_write refused: WARD_CLOCK is not test")
         ep = self.episodes.get(episode_id)
         if ep is None or ep.patient == handle_patient:
-            raise ValueError("plant_live_wrong_patient_write needs an episode owned by a different patient")
-        r = {"accepted": True, "by": "live_seam"}
+            raise ValueError("plant_post_guard_wrong_patient_write needs an episode owned by a different patient")
+        r = {"accepted": True, "by": "post_guard_wrong_patient_write_seam"}
         self._emit(COUNTED, actor=actor, role="patient_agent", discipline=None, patient=handle_patient,
-                   episode=episode_id, method="step", args=[{"type": "answer", "question_id": "live_seam", "value": True}],
-                   accepted=True, response=r, seam="live_wrong_patient_write",
-                   note={"claim": "CL-ANSWERED", "reason": "synthetic downstream write (test seam only)"})
+                   episode=episode_id, method="step", args=[{"type": "answer", "question_id": "post_guard_seam", "value": True}],
+                   accepted=True, response=r, seam="post_guard_wrong_patient_write",
+                   note={"claim": "CL-ANSWERED", "reason": "synthetic post-guard wrong-patient write (test seam only)"})
         return r
 
     def blocked(self, episode_id):
