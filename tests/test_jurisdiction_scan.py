@@ -2,7 +2,8 @@
 local job title or local currency in this repo's core (file contents, file names, and commit messages made after
 the scan base). Local names and values belong in site-profile data. Each category fails on its own check id.
 Signed/pinned ids that still carry a local word sit on the named exception list (ids only) until the next version."""
-import pathlib, re, subprocess, tomllib
+import fnmatch
+import pathlib, re, subprocess, sys, tomllib
 
 ROOT = pathlib.Path(__file__).resolve().parent
 while not (ROOT / "jurisdiction_scan.toml").is_file():
@@ -15,6 +16,38 @@ EXCEPT_IDS = [re.compile(x) for x in CFG["exceptions"]["ids"]]
 TERM_EXC = [(re.compile(e["path"]), re.compile(r"(?<![\w-])" + re.escape(e["term"]) + r"(?![\w-])"), e)
             for e in CFG["exceptions"].get("term", [])]     # one entry per term: term, path, reason
 SELF = {"jurisdiction_scan.toml", pathlib.Path(__file__).name}
+
+
+def _gitignore_patterns():
+    gi = ROOT / ".gitignore"
+    if not gi.is_file():
+        return []
+    return [ln.strip() for ln in gi.read_text(encoding="utf-8").splitlines()
+            if ln.strip() and not ln.strip().startswith("#")]
+
+
+_GITIGNORE = _gitignore_patterns()
+
+
+def _gitignore_match(rel):
+    n = rel.replace("\\", "/")
+    parts = n.split("/")
+    name = parts[-1] if parts else n
+    for pat in _GITIGNORE:
+        if pat.endswith("/"):
+            if n.startswith(pat) or f"/{pat}" in f"/{n}/":
+                return True
+        elif any(ch in pat for ch in "*?[]"):
+            if fnmatch.fnmatch(n, pat) or fnmatch.fnmatch(name, pat):
+                return True
+        elif n == pat or name == pat:
+            return True
+    return False
+
+
+def _skip_untracked_scan(rel):
+    """Build/gitignored paths are not part of the core tree when git ls-files is unavailable."""
+    return "target" in pathlib.Path(rel).parts or _gitignore_match(rel)
 
 
 def strip_ids(text):
@@ -46,10 +79,14 @@ def scan_commit_message(text):
 
 def tracked():
     r = subprocess.run(["git", "ls-files"], cwd=ROOT, capture_output=True, text=True)
-    files = [f for f in r.stdout.splitlines() if f] if r.returncode == 0 else \
-        [str(p.relative_to(ROOT)) for p in ROOT.rglob("*") if p.is_file() and ".git" not in p.parts]
+    if r.returncode == 0:
+        files = [f for f in r.stdout.splitlines() if f]
+    else:
+        files = [str(p.relative_to(ROOT)) for p in ROOT.rglob("*")
+                 if p.is_file() and ".git" not in p.parts and not _skip_untracked_scan(str(p.relative_to(ROOT)))]
     files += [str(p.relative_to(ROOT)) for p in ROOT.rglob("live_*.json")      # live results, tracked or not
-              if ".git" not in p.parts and str(p.relative_to(ROOT)) not in files]
+              if ".git" not in p.parts and str(p.relative_to(ROOT)) not in files
+              and not _skip_untracked_scan(str(p.relative_to(ROOT)))]
     return [f for f in files if pathlib.Path(f).name not in SELF]
 
 
@@ -158,6 +195,38 @@ def test_prompt_leak_extra_planted_terms():
         assert scan_text(t) == [f"SCAN-PROMPT-LEAK/{g}"], t
     assert scan_text("hellowetware@gmail.com") == []
     assert scan_text("Physician, 2026-10-16") == [] and scan_text("Clinical lead, 2026-10-17") == []
+
+
+def test_fallback_skips_target_and_gitignored_but_scans_real_paths(tmp_path, monkeypatch):
+    planted = tmp_path / "planted_scan_root"
+    planted.mkdir()
+    for name, body in [(".gitignore", "ignored/\n"), ("jurisdiction_scan.toml", (ROOT / "jurisdiction_scan.toml").read_text()),
+                       ("data/commit_message_bot_allowlist.toml", (ROOT / "data/commit_message_bot_allowlist.toml").read_text()),
+                       ("ward/real_leak.txt", "/workspace/tmp/x\n"), ("evidence/target/debug/leak.txt", "/workspace/tmp/y\n"),
+                       ("ignored/secret.txt", "/workspace/tmp/z\n")]:
+        p = planted / name
+        p.parent.mkdir(parents=True, exist_ok=True)
+        p.write_text(body, encoding="utf-8")
+    mod = sys.modules[__name__]
+    monkeypatch.setattr(mod, "ROOT", planted)
+    monkeypatch.setattr(mod, "_GITIGNORE", _gitignore_patterns())
+    real_run = subprocess.run
+
+    def fake_run(cmd, **kw):
+        if isinstance(cmd, list) and len(cmd) >= 2 and cmd[0] == "git" and cmd[1] == "ls-files":
+            return subprocess.CompletedProcess(cmd, 128, "", "")
+        return real_run(cmd, **kw)
+
+    monkeypatch.setattr(mod, "subprocess", subprocess)
+    monkeypatch.setattr(subprocess, "run", fake_run)
+    listed = tracked()
+    assert "evidence/target/debug/leak.txt" not in listed
+    assert "ignored/secret.txt" not in listed
+    assert "ward/real_leak.txt" in listed
+    hits = scan_repo()
+    assert any(h[0] == "ward/real_leak.txt" for h in hits)
+    assert not any("target" in h[0] for h in hits)
+    assert not any(h[0].startswith("ignored/") for h in hits)
 
 
 def test_untracked_live_json_is_scanned(tmp_path, monkeypatch):
