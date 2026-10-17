@@ -88,5 +88,8 @@ def test_reasoning_off_so_answer_fits_max_tokens(monkeypatch):
         seen.update(body)
         return {"model": lc.MODEL, "choices": [{"message": {"content": "{}"}}]}
     monkeypatch.setenv(live.KEY_ENV, "x")
-    lc.make_send(1, post=post)([{"instruction": "i"}])
+    send = lc.make_send(1, post=post)
+    send([{"instruction": "i"}])
     assert seen["reasoning"] == {"enabled": False} and seen["max_tokens"] == 120
+    p = send.model_calls[0]["params"]
+    assert p["reasoning"] == {"enabled": False} and p["top_p"] is None and p["stop"] is None
