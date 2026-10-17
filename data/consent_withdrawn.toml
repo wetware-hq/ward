@@ -1,0 +1,4 @@
+# Synthetic consent refs that are withdrawn; export of clinical blocks citing these is refused.
+withdrawn = [
+  "SYNTH-CONSENT-WITHDRAWN-01",
+]

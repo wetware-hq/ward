@@ -8,6 +8,8 @@ from . import live
 MODEL = "deepseek/deepseek-v4-pro-0813"          # pinned dated snapshot; cheap
 URL = "https://openrouter.ai/api/v1/chat/completions"
 LIVE = "LIVE"                                    # results from this client are labelled LIVE, never SCRIPTED
+# Every key sent on the wire for ward-evidence packing (absent keys are recorded as null, never omitted).
+PARAM_KEYS = ("model", "temperature", "top_p", "max_tokens", "seed", "reasoning", "response_format", "stop")
 
 
 class ModelMismatch(RuntimeError):
@@ -28,7 +30,17 @@ def _post(body, key):
         raise RuntimeError(f"openrouter: {type(e).__name__}: {getattr(e, 'code', '')}") from None
 
 
-def make_send(seed, post=_post):
+def _params_sent(body):
+    return {k: body[k] if k in body else None for k in PARAM_KEYS}
+
+
+def _model_call_trace(body, reply, data_class="synthetic", consent_ref=None):
+    """One JSONL-ready model_call line for ward-evidence (no auth header)."""
+    return {"kind": "model_call", "data_class": data_class, "consent_ref": consent_ref,
+            "params": _params_sent(body), "reply_raw": reply}
+
+
+def make_send(seed, post=_post, trace=None, data_class="synthetic", consent_ref=None):
     """records -> parsed JSON object from the pinned model. Use only through live.send_guarded."""
     def send(records):
         key = os.environ.get(live.KEY_ENV)
@@ -40,6 +52,10 @@ def make_send(seed, post=_post):
                 "messages": [{"role": "system", "content": records[0]["instruction"]},
                              {"role": "user", "content": json.dumps(records)}]}
         reply = post(body, key)
+        entry = _model_call_trace(body, reply, data_class=data_class, consent_ref=consent_ref)
+        send.model_calls.append(entry)
+        if trace is not None:
+            trace.append(entry)
         send.models.append(reply.get("model"))          # model seen per reply (recorded; never the key)
         if reply.get("model") != MODEL:
             raise ModelMismatch(f"reply model {reply.get('model')!r}, pinned {MODEL!r}")
@@ -47,7 +63,7 @@ def make_send(seed, post=_post):
             return json.loads(reply["choices"][0]["message"]["content"])
         except (KeyError, IndexError, TypeError, ValueError):
             raise BadReply("reply was not a JSON object") from None
-    send.models = []
+    send.models, send.model_calls = [], []
     return send
 
 
