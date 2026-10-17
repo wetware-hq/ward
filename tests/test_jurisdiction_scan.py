@@ -8,6 +8,8 @@ ROOT = pathlib.Path(__file__).resolve().parent
 while not (ROOT / "jurisdiction_scan.toml").is_file():
     ROOT = ROOT.parent
 CFG = tomllib.loads((ROOT / "jurisdiction_scan.toml").read_text(encoding="utf-8"))
+BOT_ALLOW_CFG = tomllib.loads((ROOT / "data" / "commit_message_bot_allowlist.toml").read_text(encoding="utf-8"))
+COMMIT_BOT_ADDRESSES = [e["address"] for e in BOT_ALLOW_CFG["addresses"]]
 CATS = {k: re.compile(v) for k, v in CFG["categories"].items()}
 EXCEPT_IDS = [re.compile(x) for x in CFG["exceptions"]["ids"]]
 TERM_EXC = [(re.compile(e["path"]), re.compile(r"(?<![\w-])" + re.escape(e["term"]) + r"(?![\w-])"), e)
@@ -29,6 +31,17 @@ def scan_text(text, path=None):
             if pr.search(path):
                 t = tr.sub(" ", t)
     return sorted(k for k, p in CATS.items() if p.search(t))
+
+
+def strip_commit_bot_addresses(text):
+    for addr in COMMIT_BOT_ADDRESSES:
+        text = text.replace(addr, " ")
+    return text
+
+
+def scan_commit_message(text):
+    """Prompt-leak scan for git commit bodies; cited bot/service addresses in data/commit_message_bot_allowlist.toml only."""
+    return scan_text(strip_commit_bot_addresses(text))
 
 
 def tracked():
@@ -70,10 +83,30 @@ def test_new_commit_messages_have_no_jurisdiction_terms():
     for rec in r.stdout.split("\x01"):
         if "\x00" in rec:
             sha, msg = rec.split("\x00", 1)
-            ids = scan_text(msg)
+            ids = scan_commit_message(msg)
             if ids:
                 bad.append((sha.strip()[:7], ids))
     assert bad == [], f"jurisdiction terms in commit messages: {bad}"
+
+
+def test_commit_message_bot_allowlist_is_explicit_and_cited():
+    assert len(COMMIT_BOT_ADDRESSES) == 1
+    entry = BOT_ALLOW_CFG["addresses"][0]
+    assert set(entry) == {"address", "citation", "reason"}
+    assert entry["address"] == "cursoragent@cursor.com"
+    assert entry["citation"].strip() and entry["reason"].strip()
+
+
+def test_commit_message_bot_address_allowed_only_in_commits():
+    addr = COMMIT_BOT_ADDRESSES[0]
+    trailer = f"Co-authored-by: Cursor Agent <{addr}>"
+    assert scan_commit_message(trailer) == []
+    assert scan_text(trailer) == ["SCAN-PROMPT-LEAK/email"]
+
+
+def test_commit_message_other_email_still_fails():
+    assert scan_commit_message("Co-authored-by: Someone <other.person@example.org>") == ["SCAN-PROMPT-LEAK/email"]
+    assert scan_commit_message("ping me at random.user@company.co.uk") == ["SCAN-PROMPT-LEAK/email"]
 
 
 def test_each_category_planted_term_fails_on_its_own_id(tmp_path):
