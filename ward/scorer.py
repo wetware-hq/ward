@@ -1016,14 +1016,34 @@ def _note_rows(h):
             if r["kind"] in ("call", "endware") or (r["kind"] == "harness" and r.get("op") in COUNTED_OPS_FOR_NOTES)]
 
 
+def _note_string_fields(note):
+    """Every string value stored on a trace note (reason plus any other scored text fields)."""
+    return [v for v in (note or {}).values() if isinstance(v, str)]
+
+
+def _fold_note_text(s):
+    return " ".join((s or "").casefold().split())
+
+
+def _leak_substring_in(text, sub):
+    """Substring match on note text; ignores case and runs of whitespace (failure class, not one literal)."""
+    if not sub:
+        return False
+    if sub in text:
+        return True
+    return _fold_note_text(sub) in _fold_note_text(text)
+
+
 def _note_leak_whys(r, leaks):
-    """NOTE-NO-LEAK findings for one trace row: note text on a sensitive step, or an exact leak substring."""
-    reason = (r.get("note") or {}).get("reason") or ""
+    """NOTE-NO-LEAK findings for one trace row: note text on a sensitive step, or a leak substring in any note field."""
+    note = r.get("note") or {}
+    fields = _note_string_fields(note)
+    blob = "\n".join(fields)
     out = []
-    if r.get("sensitive_step") and reason.strip():
+    if r.get("sensitive_step") and any(f.strip() for f in fields):
         out.append({"seq": r["seq"], "why": "NOTE-NO-LEAK: note text present on a sensitive_step"})
     for sub in leaks:
-        if sub and sub in reason:
+        if _leak_substring_in(blob, sub):
             out.append({"seq": r["seq"], "why": "NOTE-NO-LEAK: exact leak substring in note"})
     return out
 
