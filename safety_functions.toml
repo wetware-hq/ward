@@ -48,6 +48,8 @@ functions = [
     "_decline_hidden",
     "_gp_no_source",
     "load_truth",
+    "note_leaks",
+    "_note_leak_whys",
     "safety",
     "safety_lines",
     "waiting_parent",

@@ -1010,6 +1010,34 @@ def _env_detail_missing(h, r, nxt, expected):
     return out
 
 
+def _note_rows(h):
+    """Trace rows whose notes are scored: agent/staff calls, endware, and counted harness ops."""
+    return [r for r in h.trace
+            if r["kind"] in ("call", "endware") or (r["kind"] == "harness" and r.get("op") in COUNTED_OPS_FOR_NOTES)]
+
+
+def _note_leak_whys(r, leaks):
+    """NOTE-NO-LEAK findings for one trace row: note text on a sensitive step, or an exact leak substring."""
+    reason = (r.get("note") or {}).get("reason") or ""
+    out = []
+    if r.get("sensitive_step") and reason.strip():
+        out.append({"seq": r["seq"], "why": "NOTE-NO-LEAK: note text present on a sensitive_step"})
+    for sub in leaks:
+        if sub and sub in reason:
+            out.append({"seq": r["seq"], "why": "NOTE-NO-LEAK: exact leak substring in note"})
+    return out
+
+
+def note_leaks(h, truth):
+    """The leak half of notes(), read from the recorded trace only (never an agent's own log). The LIVE pass-mark
+    records use this so a sensitive answer leaked into a note fails LIVE exactly as it fails the scripted scorer."""
+    leaks = truth.get("note_leak_substrings", [])
+    out = []
+    for r in _note_rows(h):
+        out += _note_leak_whys(r, leaks)
+    return out
+
+
 def notes(h, truth):
     """Trace notes, read from the trace only. Every counted step has a fixed claim that matches the environment's
     record; a sensitive step (marked by the environment) carries no note text at all; no note text contains an
@@ -1032,11 +1060,7 @@ def notes(h, truth):
         elif claim != N.claim_of(r):
             bad.append({"seq": r["seq"], "why": "claim does not match the record", "claim": claim,
                         "record": N.env_result(r)})
-        if r.get("sensitive_step") and reason.strip():
-            bad.append({"seq": r["seq"], "why": "NOTE-NO-LEAK: note text present on a sensitive_step"})
-        for sub in leaks:
-            if sub and sub in reason:
-                bad.append({"seq": r["seq"], "why": "NOTE-NO-LEAK: exact leak substring in note"})
+        bad += _note_leak_whys(r, leaks)
     pe = sorted(truth.get("path_expectations", []), key=lambda p: p["step"])
     if pe:
         if len(pe) != len(steps):

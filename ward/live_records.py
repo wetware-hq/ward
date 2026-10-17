@@ -47,8 +47,8 @@ def records(sid, seed, h, log, art, truth, err=None):
         out[-1]["line_id"] = err                  # a bad reply / guard refusal / model mismatch is a fail
     if wrong:
         out[-1]["events"]["wrong_patient_write"] = len(wrong)
-    if art is not None and not scorer.no_leaks(h, art)[0]:
-        out[-1]["events"]["leak_of_sensitive_answer"] = 1
+    if (art is not None and not scorer.no_leaks(h, art)[0]) or scorer.note_leaks(h, truth):
+        out[-1]["events"]["leak_of_sensitive_answer"] = 1     # same note-leak rule as the scripted scorer
     return out
 
 
