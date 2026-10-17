@@ -62,3 +62,7 @@ S05 and S07 were checked with a scripted stand-in, not a real AI model. The scri
 ## Status
 
 Not for use with real patients.
+
+## References
+
+None. This repository is an integration harness for synthetic test patients; its compliance prompts and three-state lab/tool gate are engineering controls, not interventions evaluated in peer-reviewed literature.

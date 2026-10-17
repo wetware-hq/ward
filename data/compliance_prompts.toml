@@ -1,0 +1,15 @@
+# Synthetic lab resource and tool compliance prompts (model wording only).
+# Routing and outcomes: ward/compliance.py (deterministic). Citations: README ## References.
+
+[meta]
+abstain_human_label = "COMPLIANCE-ABSTAIN: clinician review required"
+
+[prompts.synth_lab_analyser_use]
+resource_id = "SYNTH-LAB-ANALYSER-01"
+tool_id = "SYNTH-TOOL-PIPETTE-A"
+instruction = "You are checking a synthetic test-only lab step. The episode may use the listed lab resource and tool only if policy allows. Reply with JSON containing exactly one field, decision, whose value must be one of: yes, no, abstain. No other keys. No prose."
+
+[prompts.synth_tool_calibration]
+resource_id = "SYNTH-LAB-CAL-BENCH-01"
+tool_id = "SYNTH-TOOL-CAL-WRENCH-01"
+instruction = "You are checking a synthetic test-only tool calibration request. Reply with JSON containing exactly one field, decision, whose value must be one of: yes, no, abstain. No other keys. No prose."
