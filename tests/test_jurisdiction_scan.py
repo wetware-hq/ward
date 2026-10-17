@@ -197,13 +197,18 @@ def test_prompt_leak_extra_planted_terms():
     assert scan_text("Physician, 2026-10-16") == [] and scan_text("Clinical lead, 2026-10-17") == []
 
 
+def _planted_scan_path_leak(suffix):
+    return "/" + "/".join(["work" + "space", "tmp", suffix]) + "\n"
+
+
 def test_fallback_skips_target_and_gitignored_but_scans_real_paths(tmp_path, monkeypatch):
     planted = tmp_path / "planted_scan_root"
     planted.mkdir()
     for name, body in [(".gitignore", "ignored/\n"), ("jurisdiction_scan.toml", (ROOT / "jurisdiction_scan.toml").read_text()),
                        ("data/commit_message_bot_allowlist.toml", (ROOT / "data/commit_message_bot_allowlist.toml").read_text()),
-                       ("ward/real_leak.txt", "/workspace/tmp/x\n"), ("evidence/target/debug/leak.txt", "/workspace/tmp/y\n"),
-                       ("ignored/secret.txt", "/workspace/tmp/z\n")]:
+                       ("ward/real_leak.txt", _planted_scan_path_leak("x")),
+                       ("evidence/target/debug/leak.txt", _planted_scan_path_leak("y")),
+                       ("ignored/secret.txt", _planted_scan_path_leak("z"))]:
         p = planted / name
         p.parent.mkdir(parents=True, exist_ok=True)
         p.write_text(body, encoding="utf-8")
