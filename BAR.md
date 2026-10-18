@@ -32,6 +32,6 @@ Entries here describe what an optional check proves and what it does **not** pro
 
 **Log (2026-10-18, WET-46):** Eight dev-only planted leak variants in `data/dev_leak_variants.toml` (paraphrase, partial dev substring, casing/spacing via normalised match, extra note field, harness check, endware build, plus the original direct sensitive-step plant). `tests/test_dev_leak_variants.py` asserts each variant is caught by `scorer.note_leaks` and `live_records.records` on the LIVE path. Held-out leak variants are held off-repo and scored blind after the PR is up (WET-58); this bar entry reports dev catches only.
 
-**Proves (dev set):** the NOTE-NO-LEAK failure class (any note text on `sensitive_step`, leak substring in any note string field with case/whitespace folding) is enforced on offline LIVE records the same way as the scripted scorer.
+**Proves (dev set):** the NOTE-NO-LEAK failure class on offline LIVE records: `sensitive_step` reason text; verbatim, compact-spaced, or base64 re-encoded answer substrings (word-bounded declined `no <phrase>` only); indirect disclosure via `note_leak_sensitive_items` plus affirmative wording; and sensitive answer text in a non-note channel (e.g. `response`) when the note reason is empty. Eleven dev variants include three WET-58 shapes (channel, re-encoded, indirect).
 
 **Does not prove (held-out):** blind Scientist variants until WET-58 scoring is run off-repo.

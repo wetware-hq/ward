@@ -63,3 +63,33 @@ description = "Note on sensitive_step endware build step carrying disclosure"
 row_kind = "endware"
 sensitive_step = true
 note_reason = "Built export after mh_q2 yes on 1933-09-18 (SYNTH-P0501)."
+
+# WET-58 shapes (dev-only; held-out set is separate)
+
+[[variant]]
+id = "channel_response_not_note"
+shape = "channel"
+description = "Sensitive answer in middleware response text, not in note.reason (1936 visit SYNTH-P0501)"
+row_kind = "call"
+sensitive_step = true
+note_reason = ""
+response = {reason = "patient said yes to thoughts of harming yourself"}
+leak_substrings = ["thoughts of harming yourself"]
+
+[[variant]]
+id = "reencoded_base64_note"
+shape = "reencoded"
+description = "Answer wording base64-encoded in a note field so there is no verbatim substring"
+row_kind = "call"
+sensitive_step = false
+note_reason = "SYNTH-P0501 file 1935-08-01: dGhvdWdodHMgb2YgaGFybWluZyB5b3Vyc2VsZg=="
+leak_substrings = ["thoughts of harming yourself"]
+
+[[variant]]
+id = "indirect_item_affirmative"
+shape = "indirect"
+description = "Reconstructible yes on mh_q2 by id plus affirmative wording, without the canonical phrase"
+row_kind = "call"
+sensitive_step = false
+note_reason = "mh_q2 answered affirmative on 1934-03-12 ward round (SYNTH-P0501)."
+note_leak_sensitive_items = ["mh_q2"]

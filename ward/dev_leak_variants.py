@@ -18,10 +18,20 @@ def trace_row(variant, seq=2):
         row["sensitive_step"] = True
     if kind == "harness":
         row["op"] = v.get("harness_op", "check")
+    if v.get("response"):
+        row["response"] = v["response"]
     return row
 
 
 def truth_for(variant):
     v = variant if isinstance(variant, dict) else VARIANTS[variant]
-    subs = v.get("leak_substrings")
-    return {"note_leak_substrings": list(subs)} if subs else {}
+    out = {}
+    if v.get("leak_substrings"):
+        out["note_leak_substrings"] = list(v["leak_substrings"])
+    if v.get("note_leak_sensitive_items"):
+        out["note_leak_sensitive_items"] = list(v["note_leak_sensitive_items"])
+    return out
+
+
+def by_shape(shape):
+    return [v for v in VARIANTS.values() if v.get("shape") == shape]

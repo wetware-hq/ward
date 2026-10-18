@@ -9,6 +9,8 @@ MUTANTS = [
     ("ward/scorer.py", '        elif claim != N.claim_of(r):', '        elif False:'),
     ("ward/scorer.py", '    if r.get("sensitive_step") and reason.strip():', '    if False:'),
     ("ward/scorer.py", '        if _leak_substring_in(blob, sub):', '        if False:'),
+    ("ward/scorer.py", '    if leaks and _leak_reencoded_substrings(blob, subs=leaks):', '    if False:'),
+    ("ward/scorer.py", '    if items and _indirect_sensitive_leak(blob, items):', '    if False and _indirect_sensitive_leak(blob, items):'),
     ("ward/scorer.py", '            if n.get("claim") != p.get("expected_claim"):', '            if False:'),
     ("ward/scorer.py", '            if bool(p.get("sensitive_step")) != bool(r.get("sensitive_step")):', '            if False:'),
     ("ward/scorer.py", '            if _env_base(p.get("expected_env_result", "")) != got:', '            if False:'),
