@@ -15,7 +15,10 @@ _THREE_STATE_CTX = re.compile(
     r"whose value must be one of:\s*yes,\s*no)"
 )
 
-_ANSWER_JSON_BIN = re.compile(r'\{[^{}]*["\']?answer["\']?\s*:\s*true\|false\s*\}', re.I)
+_ANSWER_JSON_BIN = re.compile(r'\{[^{}]*["\']?answer["\']?\s*:\s*true\s*\|\s*false\s*\}', re.I)
+_ANSWER_JSON_SLASH = re.compile(r'\{[^{}]*["\']?answer["\']?\s*:\s*true\s*/\s*false\s*\}', re.I)
+_TRUE_FALSE_PIPE = re.compile(r"\btrue\s*\|\s*false\b", re.I)
+_TRUE_OR_FALSE = re.compile(r"\btrue\s+or\s+false\b", re.I)
 _YES_NO_ENUM = re.compile(r"(?i)one of:\s*yes,\s*no\b(?!\s*,\s*abstain)")
 _YES_OR_NO = re.compile(r"(?i)\byes or no\b")
 
@@ -34,12 +37,22 @@ def _needs_three_state(text: str) -> bool:
     return bool(_THREE_STATE_CTX.search(text))
 
 
+def _offers_abstain(text: str) -> bool:
+    return bool(re.search(r"\bnull\b", text, re.I) or re.search(r"(?i)\babstain\b", text))
+
+
 def _binary_answer_schema(text: str) -> bool:
-    return any("null" not in m.group(0).lower() for m in _ANSWER_JSON_BIN.finditer(text))
+    if _offers_abstain(text):
+        return False
+    if _ANSWER_JSON_BIN.search(text) or _ANSWER_JSON_SLASH.search(text):
+        return True
+    if _TRUE_FALSE_PIPE.search(text) or _TRUE_OR_FALSE.search(text):
+        return True
+    return False
 
 
 def _yes_no_without_abstain(text: str) -> bool:
-    if re.search(r"(?i)\babstain\b", text) or re.search(r"\bnull\b", text, re.I):
+    if _offers_abstain(text):
         return False
     return bool(_YES_NO_ENUM.search(text) or _YES_OR_NO.search(text))
 
@@ -138,5 +151,7 @@ if __name__ == "__main__":
     import sys
 
     root = pathlib.Path(sys.argv[1] if len(sys.argv) > 1 else ".")
-    for path, lineno, kind, detail in scan(root):
+    hits = scan(root)
+    for path, lineno, kind, detail in hits:
         print(f"{path}:{lineno}\t{kind}\t{detail}")
+    sys.exit(1 if hits else 0)
