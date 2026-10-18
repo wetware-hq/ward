@@ -93,13 +93,37 @@ def test_scorer_flags_wrong_patient_write_from_trace():
     assert passmarks.reason(recs[-1]) == "PM-WRONG-PATIENT-WRITE"
 
 
-def test_plant_post_guard_wrong_patient_write_requires_test_clock(monkeypatch):
+def _s07_cross_patient_harness():
     h = Harness("S07-adversarial-agent", 1)
     h.episodes["SYNTH-EP-0702"] = type("E", (), {"patient": "SYNTH-P0702"})()
+    return h
+
+
+def test_plant_post_guard_wrong_patient_write_refuses_when_ward_clock_not_test(monkeypatch):
+    h = _s07_cross_patient_harness()
+    n = len(h.trace)
     monkeypatch.delenv("WARD_CLOCK", raising=False)
     with pytest.raises(RuntimeError, match="WARD_CLOCK"):
         h.plant_post_guard_wrong_patient_write("SYNTH-EP-0702", "SYNTH-P0701")
+    assert len(h.trace) == n
+    monkeypatch.setenv("WARD_CLOCK", "live")
+    with pytest.raises(RuntimeError, match="WARD_CLOCK"):
+        h.plant_post_guard_wrong_patient_write("SYNTH-EP-0702", "SYNTH-P0701")
+    assert len(h.trace) == n
+
+
+def test_plant_post_guard_wrong_patient_write_refuses_when_handle_owns_episode(monkeypatch):
     monkeypatch.setenv("WARD_CLOCK", "test")
+    h = _s07_cross_patient_harness()
+    n = len(h.trace)
+    with pytest.raises(ValueError, match="different patient"):
+        h.plant_post_guard_wrong_patient_write("SYNTH-EP-0702", "SYNTH-P0702")
+    assert len(h.trace) == n
+
+
+def test_plant_post_guard_wrong_patient_write_records_seam_under_test_clock(monkeypatch):
+    monkeypatch.setenv("WARD_CLOCK", "test")
+    h = _s07_cross_patient_harness()
     h.plant_post_guard_wrong_patient_write("SYNTH-EP-0702", "SYNTH-P0701")
     assert h.trace[-1]["seam"] == "post_guard_wrong_patient_write" and h.trace[-1]["accepted"]
 
