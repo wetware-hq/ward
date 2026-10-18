@@ -59,7 +59,8 @@ def test_run_one_key_never_in_body(ready, sid, content):
     def post(body, key):
         seen.append((body, key))
         recs = json.loads(body["messages"][1]["content"])
-        c = content or {"answer": told[recs[0]["question_id"]]}
+        qid = recs[0]["question_id"]
+        c = content or {"answer": told[qid] if told[qid] is not None else True}
         return {"model": lc.MODEL, "choices": [{"message": {"content": json.dumps(c)}}]}
     truth = load_truth(sid) or {}
     lc.run_one(sid, truth, post)(9001)

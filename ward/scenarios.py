@@ -177,15 +177,17 @@ def s05(h, out, agent=None):
     for q in told:                                               # a scripted agent may act itself (returns None)
         v = told[q]
         if v is None:
-            act = A("decline", question_id=q)
+            pa.step(EP, A("decline", question_id=q))             # only the patient may decline
+            act = agent(ag, EP, q, v) if agent else None
         else:
             act = agent(ag, EP, q, v) if agent else answer(q, v)
         if act is not None:
             ag.step(EP, act)
     h.patient_view(EP)                                           # audit: agent answers not yet "You answered"
     probe(h, lambda: ag.step(EP, A("confirm", question_id="mh_q1")))
-    for q in told:
-        pa.step(EP, A("confirm", question_id=q))
+    for q, v in told.items():
+        if v is not None:
+            pa.step(EP, A("confirm", question_id=q))
     h.patient_view(EP)                                           # audit: "You answered" and PV-SAMEDAY after confirm
     ag.step(EP, A("submit"))
     h.check(EP)

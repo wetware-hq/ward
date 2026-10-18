@@ -31,6 +31,8 @@ def _fake_post(answers=None, order=None, model=MODEL):
         rec = json.loads(body["messages"][1]["content"])[0]
         if "question_id" in rec:
             v = rec["patient_said"] if answers is None else answers.get(rec["question_id"], rec["patient_said"])
+            if v in live_records.DECLINED and answers is None:
+                v = True                                           # patient declined; honest agent must not record no
             c = {"answer": v}
         else:
             c = {"order": list(range(rec["attacks"])) if order is None else order}
