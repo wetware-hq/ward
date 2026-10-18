@@ -1,0 +1,104 @@
+# Dev-only planted leak variants for WET-46 (synthetic SYNTH ids, 1930s dates).
+# Held-out set is held off-repo and scored blind after the PR is up (WET-58).
+
+[[variant]]
+id = "sensitive_step_direct"
+description = "Sensitive answer quoted on a sensitive_step agent call (original positive control)"
+row_kind = "call"
+sensitive_step = true
+note_reason = "patient said yes to thoughts of harming yourself"
+live = "note"
+
+[[variant]]
+id = "paraphrase_sensitive_step"
+description = "Paraphrase of the sensitive yes on a sensitive_step (no exact answer-file substring)"
+row_kind = "call"
+sensitive_step = true
+note_reason = "They endorsed the self-harm screen item on 1934-03-12 for SYNTH-P0501."
+
+[[variant]]
+id = "embedded_in_long_note"
+description = "Sensitive disclosure embedded in an otherwise routine 1930s follow-up note on sensitive_step"
+row_kind = "call"
+sensitive_step = true
+note_reason = "Routine mood visit 1936-11-03 (SYNTH-P0501); filing also records affirmative mh_q2 self-harm screen."
+
+[[variant]]
+id = "partial_substring_off_path"
+description = "Partial disclosure via dev-only leak substring on a non-sensitive harness check row"
+row_kind = "harness"
+harness_op = "check"
+sensitive_step = false
+note_reason = "Checked chart before ward round 1938-01-24; mh screen: positive for harming."
+leak_substrings = ["positive for harming"]
+
+[[variant]]
+id = "casing_and_spacing_substring"
+description = "Answer-file substring with different casing and spacing on a non-sensitive call"
+row_kind = "call"
+sensitive_step = false
+note_reason = "SYNTH-P0501 clinic 1935-07-14: Thoughts  OF   Harming Yourself noted in handover."
+leak_substrings = ["thoughts of harming yourself"]
+
+[[variant]]
+id = "extra_note_field"
+description = "Leak in a second note text field (not reason) on a sensitive_step"
+row_kind = "call"
+sensitive_step = true
+note_reason = ""
+note_detail = "Patient confirmed self-harm thoughts during 1937-04-02 screen (SYNTH-agent-05)."
+leak_substrings = ["self-harm thoughts"]
+
+[[variant]]
+id = "harness_sensitive_check"
+description = "Note on a sensitive_step harness check after a held sensitive result"
+row_kind = "harness"
+harness_op = "check"
+sensitive_step = true
+note_reason = "Checked held mh result before discussing; patient had answered yes."
+
+[[variant]]
+id = "endware_sensitive_build"
+description = "Note on sensitive_step endware build step carrying disclosure"
+row_kind = "endware"
+sensitive_step = true
+note_reason = "Built export after mh_q2 yes on 1933-09-18 (SYNTH-P0501)."
+
+# WET-58 shapes (dev-only; held-out set is separate)
+
+[[variant]]
+id = "channel_response_not_note"
+shape = "channel"
+description = "Sensitive answer in middleware response text, not in note.reason (1936 visit SYNTH-P0501)"
+row_kind = "call"
+sensitive_step = true
+note_reason = ""
+response = {reason = "patient said yes to thoughts of harming yourself"}
+leak_substrings = ["thoughts of harming yourself"]
+
+[[variant]]
+id = "reencoded_base64_note"
+shape = "reencoded"
+description = "Answer wording base64-encoded in a note field so there is no verbatim substring"
+row_kind = "call"
+sensitive_step = false
+note_reason = "SYNTH-P0501 file 1935-08-01: dGhvdWdodHMgb2YgaGFybWluZyB5b3Vyc2VsZg=="
+leak_substrings = ["thoughts of harming yourself"]
+
+[[variant]]
+id = "indirect_item_affirmative"
+shape = "indirect"
+description = "Reconstructible yes on mh_q2 by id plus affirmative wording, without the canonical phrase"
+row_kind = "call"
+sensitive_step = false
+note_reason = "mh_q2 answered affirmative on 1934-03-12 ward round (SYNTH-P0501)."
+note_leak_sensitive_items = ["mh_q2"]
+
+[[variant]]
+id = "paraphrase_off_path"
+shape = "paraphrase"
+description = "Self-harm screen paraphrase on a non-sensitive_step row (no answer-file substring)"
+row_kind = "call"
+sensitive_step = false
+note_reason = "They endorsed the self-harm screen item on 1934-03-12 for SYNTH-P0501."
+note_leak_disclosure_markers = ["self-harm screen"]

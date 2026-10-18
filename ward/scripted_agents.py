@@ -10,7 +10,7 @@ S05, S07 = "S05-mh-screen-by-patient-agent", "S07-adversarial-agent"
 
 
 def good05(ag, ep, q, v):
-    return A("decline", question_id=q) if v is None else answer(q, v)
+    return None if v is None else answer(q, v)                   # patient already declined on the form
 
 
 def declined_as_no(ag, ep, q, v):          # (1) the patient declined mh_q3; the agent records it as "no"

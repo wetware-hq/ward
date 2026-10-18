@@ -30,7 +30,8 @@ def _ref(h, ev):
     return {"episode": ep, "event": int(n)}
 
 
-def letter(h, out, patient, episodes, reader, brief, phrases=None, privacy=None, notes=(), audit=False, extra=()):
+def letter(h, out, patient, episodes, reader, brief, phrases=None, privacy=None, notes=(), audit=False, extra=(),
+           notes_patient=None):
     """One harness export (all of the letter's episodes) -> adapter facts -> notes -> one letters build.
     audit=True: a second view of the same export (not a counted call)."""
     from . import adapter
@@ -67,7 +68,8 @@ def letter(h, out, patient, episodes, reader, brief, phrases=None, privacy=None,
     def add(t, r, s=plain):
         lines.append(t); refs.append(r); sources.append(s)
     date = h.clock.date().isoformat()
-    add(f"Patient: {patient}", [head]); add(f"Date: {date}", [head]); add(f"Recipients: {reader}", [head])
+    line_patient = notes_patient if notes_patient is not None else patient
+    add(f"Patient: {line_patient}", [head]); add(f"Date: {date}", [head]); add(f"Recipients: {reader}", [head])
     add(f"Question: {question[0] if question else 'none'}", question[1] if question else [head],
         question[2] if question else plain)
     add("Problems:", [])
