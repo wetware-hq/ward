@@ -1,0 +1,20 @@
+# Synthetic immunology referral form (case entry path only). Consent attestation before ward gates run.
+form_id = "immunology-referral"
+version = "1"
+audience = "patient"
+
+[[question]]
+id = "design_use_confirmed"
+version = "1"
+text = "Do you consent to in-silico design work against your variant for this episode?"
+alert_answer = false
+safety_critical = true
+clinician_must_confirm = false
+
+[[question]]
+id = "research_scope_ack"
+version = "1"
+text = "Do you understand this episode is for research use only?"
+alert_answer = false
+safety_critical = false
+clinician_must_confirm = false

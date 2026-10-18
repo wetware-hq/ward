@@ -1,0 +1,18 @@
+# Synthetic orders list for the immunology case entry path: one consult note filed before letters.
+list_id = "SYNTH-immunology-handoff"
+version = "1"
+source_lines = 1
+
+[[record]]
+id = "SYNTH-REC-IMM-CONSULT"
+kind = "result review note"
+
+[[job]]
+id = "file_consult"
+text = "File immunology consult summary"
+depends_on = []
+owner = "SYNTH-dr-imm"
+due = "1937-04-02 12:00"
+safety_critical = false
+agent_doable = false
+source_line = 1
