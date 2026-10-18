@@ -11,6 +11,7 @@ MUTANTS = [
     ("ward/scorer.py", '        if _leak_substring_in(blob, sub):', '        if False:'),
     ("ward/scorer.py", '    if leaks and _leak_reencoded_substrings(blob, subs=leaks):', '    if False:'),
     ("ward/scorer.py", '    if items and _indirect_sensitive_leak(blob, items):', '    if False and _indirect_sensitive_leak(blob, items):'),
+    ("ward/scorer.py", '    if markers and _disclosure_marker_leak(blob, markers):', '    if False and _disclosure_marker_leak(blob, markers):'),
     ("ward/scorer.py", '            if n.get("claim") != p.get("expected_claim"):', '            if False:'),
     ("ward/scorer.py", '            if bool(p.get("sensitive_step")) != bool(r.get("sensitive_step")):', '            if False:'),
     ("ward/scorer.py", '            if _env_base(p.get("expected_env_result", "")) != got:', '            if False:'),

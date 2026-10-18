@@ -7,7 +7,7 @@ from ward import dev_leak_variants as dv
 from ward import live_records, scorer
 
 ROOT = Path(__file__).resolve().parent.parent
-MIN_VARIANTS = 6
+MIN_VARIANTS = 12
 
 
 def _variants():
@@ -72,7 +72,14 @@ def test_honest_sensitive_step_claim_only_no_leak():
     assert not scorer.note_leaks(h, {})
 
 
-@pytest.mark.parametrize("shape", ["channel", "reencoded", "indirect"])
+def test_dev_variant_paraphrase_off_path_caught():
+    vid = "paraphrase_off_path"
+    v = dv.VARIANTS[vid]
+    h = type("H", (), {"trace": [dv.trace_row(v)]})()
+    assert scorer.note_leaks(h, dv.truth_for(v))
+
+
+@pytest.mark.parametrize("shape", ["channel", "reencoded", "indirect", "paraphrase"])
 def test_wet58_shape_variants_caught(shape):
     ids = [v["id"] for v in dv.VARIANTS.values() if v.get("shape") == shape]
     assert ids, shape

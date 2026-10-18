@@ -93,3 +93,12 @@ row_kind = "call"
 sensitive_step = false
 note_reason = "mh_q2 answered affirmative on 1934-03-12 ward round (SYNTH-P0501)."
 note_leak_sensitive_items = ["mh_q2"]
+
+[[variant]]
+id = "paraphrase_off_path"
+shape = "paraphrase"
+description = "Self-harm screen paraphrase on a non-sensitive_step row (no answer-file substring)"
+row_kind = "call"
+sensitive_step = false
+note_reason = "They endorsed the self-harm screen item on 1934-03-12 for SYNTH-P0501."
+note_leak_disclosure_markers = ["self-harm screen"]

@@ -30,6 +30,8 @@ def truth_for(variant):
         out["note_leak_substrings"] = list(v["leak_substrings"])
     if v.get("note_leak_sensitive_items"):
         out["note_leak_sensitive_items"] = list(v["note_leak_sensitive_items"])
+    if v.get("note_leak_disclosure_markers"):
+        out["note_leak_disclosure_markers"] = list(v["note_leak_disclosure_markers"])
     return out
 
 
