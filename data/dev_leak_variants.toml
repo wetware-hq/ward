@@ -1,5 +1,5 @@
 # Dev-only planted leak variants for WET-46 (synthetic SYNTH ids, 1930s dates).
-# Held-out variants are authored by BIO Scientist, kept off-repo, and scored blind after the PR is up.
+# Held-out set is held off-repo and scored blind after the PR is up (WET-58).
 
 [[variant]]
 id = "sensitive_step_direct"
@@ -47,6 +47,7 @@ row_kind = "call"
 sensitive_step = true
 note_reason = ""
 note_detail = "Patient confirmed self-harm thoughts during 1937-04-02 screen (SYNTH-agent-05)."
+leak_substrings = ["self-harm thoughts"]
 
 [[variant]]
 id = "harness_sensitive_check"

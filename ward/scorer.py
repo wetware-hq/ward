@@ -1016,9 +1016,10 @@ def _note_rows(h):
             if r["kind"] in ("call", "endware") or (r["kind"] == "harness" and r.get("op") in COUNTED_OPS_FOR_NOTES)]
 
 
-def _note_string_fields(note):
-    """Every string value stored on a trace note (reason plus any other scored text fields)."""
-    return [v for v in (note or {}).values() if isinstance(v, str)]
+def _note_free_text(note):
+    """Free-text note fields scored for leak substrings (never fixed CL- claim ids)."""
+    note = note or {}
+    return [v for k, v in note.items() if k != "claim" and isinstance(v, str)]
 
 
 def _fold_note_text(s):
@@ -1026,21 +1027,32 @@ def _fold_note_text(s):
 
 
 def _leak_substring_in(text, sub):
-    """Substring match on note text; ignores case and runs of whitespace (failure class, not one literal)."""
+    """Substring match on free-text notes; folds case/whitespace. Declined screening phrasing ('no …') is not a leak."""
     if not sub:
         return False
-    if sub in text:
+    folded = _fold_note_text(text)
+    want = _fold_note_text(sub)
+    if not want:
+        return False
+    start = 0
+    while start <= len(folded):
+        i = folded.find(want, start)
+        if i < 0:
+            return False
+        before = folded[:i].rstrip()
+        if before.endswith("no") or before.endswith("not"):
+            start = i + 1
+            continue
         return True
-    return _fold_note_text(sub) in _fold_note_text(text)
 
 
 def _note_leak_whys(r, leaks):
-    """NOTE-NO-LEAK findings for one trace row: note text on a sensitive step, or a leak substring in any note field."""
+    """NOTE-NO-LEAK findings for one trace row: reason text on a sensitive step, or a leak substring in free text."""
     note = r.get("note") or {}
-    fields = _note_string_fields(note)
-    blob = "\n".join(fields)
+    reason = note.get("reason") or ""
+    blob = "\n".join(_note_free_text(note))
     out = []
-    if r.get("sensitive_step") and any(f.strip() for f in fields):
+    if r.get("sensitive_step") and reason.strip():
         out.append({"seq": r["seq"], "why": "NOTE-NO-LEAK: note text present on a sensitive_step"})
     for sub in leaks:
         if _leak_substring_in(blob, sub):

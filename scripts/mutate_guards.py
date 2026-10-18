@@ -7,7 +7,7 @@ MUTANTS = [
     ("ward/domainscan.py", "if isinstance(n, ast.Constant) and isinstance(n.value, str) and id(n) not in skip:", "if isinstance(n, ast.Constant) and isinstance(n.value, str):"),
     ("ward/domainscan.py", "hits.append((str(path), n.lineno, kind, m.group(1)))", "pass"),
     ("ward/scorer.py", '        elif claim != N.claim_of(r):', '        elif False:'),
-    ("ward/scorer.py", '    if r.get("sensitive_step") and any(f.strip() for f in fields):', '    if False:'),
+    ("ward/scorer.py", '    if r.get("sensitive_step") and reason.strip():', '    if False:'),
     ("ward/scorer.py", '        if _leak_substring_in(blob, sub):', '        if False:'),
     ("ward/scorer.py", '            if n.get("claim") != p.get("expected_claim"):', '            if False:'),
     ("ward/scorer.py", '            if bool(p.get("sensitive_step")) != bool(r.get("sensitive_step")):', '            if False:'),
