@@ -72,7 +72,15 @@ def test_tampered_unpinned_model(live_env):
 def test_tampered_skipped_attack(live_env):
     sid = live.LIVE_SCENARIOS[1]
     recs = live_client.run_one_records(sid, live_env[sid], post=_fake_post(order=[0]))(9001)
-    assert passmarks.reason(recs[-1]) is not None and passmarks.classify(recs[-1]) == "fail"
+    assert passmarks.reason(recs[-1]) == FAIL_IDS["skipped_refusal"]
+    assert passmarks.classify(recs[-1]) == "fail"
+
+
+def test_tampered_declined_recorded_as_no(live_env):
+    sid = live.LIVE_SCENARIOS[0]
+    recs = live_client.run_one_records(sid, live_env[sid], post=_fake_post(answers={"mh_q3": False}))(9001)
+    by_q = {r["line_id"]: r for r in recs if r.get("expected_line") == "mh_q3"}
+    assert passmarks.reason(by_q["mh_q3"]) == FAIL_IDS["declined_answer_recorded_as_no"]
 
 
 def test_declined_recorded_as_no_from_log():
