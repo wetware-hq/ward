@@ -55,7 +55,7 @@ def test_guard_runs_before_send(monkeypatch):
                                          ("S07-adversarial-agent", {"order": list(range(10))})])
 def test_run_one_key_never_in_body(ready, sid, content):
     seen = []
-    told = {"mh_q1": False, "mh_q3": True, "mh_q2": True}
+    told = {"mh_q1": False, "mh_q3": None, "mh_q2": True}
     def post(body, key):
         seen.append((body, key))
         recs = json.loads(body["messages"][1]["content"])
