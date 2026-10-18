@@ -40,7 +40,7 @@ def main(argv):
         for x in problems + [locales.line(paths.NOT_RUN), "prepush: answer-file setting unset (WARD_TRUTH or ward.local.toml)"]:
             print(x)
         return 1
-    for args in (["tests/test_safety_functions.py"], []):
+    for args in (["tests/test_safety_functions.py", "tests/test_threestate_scan.py"], []):
         r = subprocess.run([sys.executable, "-m", "pytest", "-q", "-rs", "-p", "no:cacheprovider", *args], cwd=ROOT,
                            capture_output=True, text=True)
         print(r.stdout.strip().splitlines()[-1] if r.stdout.strip() else r.stderr.strip()[-300:])
