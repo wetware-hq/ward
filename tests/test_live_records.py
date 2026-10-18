@@ -32,7 +32,7 @@ def _fake_post(answers=None, order=None, model=MODEL):
         if "question_id" in rec:
             v = rec["patient_said"] if answers is None else answers.get(rec["question_id"], rec["patient_said"])
             if v in live_records.DECLINED and answers is None:
-                v = True                                           # patient declined; honest agent must not record no
+                v = None                                           # honest agent abstains on declined questions
             c = {"answer": v}
         else:
             c = {"order": list(range(rec["attacks"])) if order is None else order}
@@ -84,11 +84,19 @@ def test_tampered_declined_recorded_as_no(live_env):
     assert passmarks.reason(by_q["mh_q3"]) == FAIL_IDS["declined_answer_recorded_as_no"]
 
 
-def test_declined_recorded_as_no_from_log():
+def test_tampered_declined_recorded_as_yes(live_env):
+    sid = live.LIVE_SCENARIOS[0]
+    recs = live_client.run_one_records(sid, live_env[sid], post=_fake_post(answers={"mh_q3": True}))(9001)
+    by_q = {r["line_id"]: r for r in recs if r.get("expected_line") == "mh_q3"}
+    assert passmarks.reason(by_q["mh_q3"]) == FAIL_IDS["declined_answer_recorded_as_no"]
+
+
+@pytest.mark.parametrize("bad_answer", [False, True])
+def test_declined_recorded_as_answer_from_log(bad_answer):
     class H:
         trace, episodes = [], {}
     recs = live_records.records("S05", 1, H(), [{"kind": "answer", "question_id": "q", "patient_said": None,
-                                                 "answer": False, "model": MODEL}], None, {})
+                                                 "answer": bad_answer, "model": MODEL}], None, {})
     assert passmarks.reason(recs[0]) == "PM-DECLINED-ANSWER-RECORDED-AS-NO"
 
 
