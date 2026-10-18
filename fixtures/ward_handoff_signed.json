@@ -1,0 +1,51 @@
+{
+  "schema": "bindi.ward_handoff.v1",
+  "case_id": "SYNTH-IMM-001",
+  "synthetic": true,
+  "signed": true,
+  "signature": {
+    "signed": true,
+    "signed_by": "SYNTH-bindi-handoff-signoff-test"
+  },
+  "evidence_level": "sequence_level",
+  "presentation": {
+    "summary": "Invented 58-year-old with a lung adenocarcinoma stand-in, progressing after first-line therapy. Every field on this record is made up for testing.",
+    "diagnosis": "Lung adenocarcinoma (synthetic stand-in)",
+    "stage": "IV"
+  },
+  "restriction_allele": "HLA-A*02:01",
+  "gene": "SYNTHGENE1",
+  "variant": "p.G12D",
+  "consent": {
+    "obtained": true,
+    "design_use": true,
+    "scope": "research_only"
+  },
+  "data_class": {
+    "synthetic": true,
+    "sensitivity": "internal",
+    "release": "not_a_release"
+  },
+  "shown_sequences": [
+    {
+      "sequence": "ACDEFGHIKL",
+      "provenance": {
+        "kind": "fixture",
+        "source": "fixtures/sample_ranked.csv (synthetic test row)"
+      }
+    }
+  ],
+  "human_reference_gate": {
+    "status": "pass",
+    "verdict": "pass",
+    "per_sequence": []
+  },
+  "hazard_screen": {
+    "status": "pass",
+    "verdict": "pass",
+    "per_sequence": []
+  },
+  "candidate_count": 1,
+  "candidates_ranked": false,
+  "release": false
+}
