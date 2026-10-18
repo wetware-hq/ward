@@ -2,7 +2,7 @@
 but the pinned one fails the run; the key never reaches records, prompts or errors. No network: post is stubbed."""
 import json
 import pytest
-from ward import live, live_client as lc
+from ward import live, live_client as lc, live_records
 from ward.scorer import load_truth
 
 KEY = "sk-or-test-NOT-A-REAL-KEY"
@@ -85,6 +85,24 @@ def test_scripted_still_refuses_with_key(monkeypatch):
 
 def test_live_scenarios_only():
     assert set(lc.AGENTS) == set(live.LIVE_SCENARIOS) and live.SEEDS == tuple(range(9001, 9021))
+
+
+def test_s05_declined_question_prompt_offers_null_abstain(ready):
+    captured = []
+
+    def send(records):
+        captured.append(records[0])
+        return {"answer": None}
+
+    send.models = []
+    agent = lc._s05_agent("S05-mh-screen-by-patient-agent", 9001, send)
+    for told in live_records.DECLINED:
+        captured.clear()
+        agent(None, "SYNTH-EP-0501", "mh_q3", told)
+        instr = captured[0]["instruction"]
+        assert "null" in instr
+        assert '{"answer": true|false} only' not in instr
+        assert "true|false|null" in instr
 
 
 def test_reasoning_off_so_answer_fits_max_tokens(monkeypatch):
