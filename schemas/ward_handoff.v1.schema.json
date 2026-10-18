@@ -1,0 +1,70 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/wetware-hq/ward/schemas/ward_handoff.v1.schema.json",
+  "title": "bindi.ward_handoff.v1",
+  "description": "bindi-to-ward hand-off: case facts, optional shown sequences (sequence-level evidence only), and bindi output-gate verdicts ward must verify without re-running.",
+  "type": "object",
+  "required": [
+    "schema",
+    "case_id",
+    "synthetic",
+    "signed",
+    "signature",
+    "evidence_level",
+    "presentation",
+    "consent",
+    "data_class"
+  ],
+  "additionalProperties": true,
+  "properties": {
+    "schema": {"const": "bindi.ward_handoff.v1"},
+    "case_id": {
+      "type": "string",
+      "pattern": "^SYNTH-[A-Za-z0-9._-]+$"
+    },
+    "synthetic": {"const": true},
+    "signed": {"type": "boolean"},
+    "signature": {
+      "type": "object",
+      "required": ["signed"],
+      "properties": {
+        "signed": {"type": "boolean"},
+        "signed_by": {"type": "string"},
+        "role": {"type": "string"},
+        "signed_at": {"type": "string"}
+      }
+    },
+    "evidence_level": {
+      "type": "string",
+      "enum": ["sequence_level", "structure_validated"]
+    },
+    "presentation": {"type": "object"},
+    "restriction_allele": {"type": "string"},
+    "gene": {"type": "string"},
+    "variant": {"type": "string"},
+    "consent": {"type": "object"},
+    "data_class": {"type": "object"},
+    "shown_sequences": {
+      "type": "array",
+      "items": {"$ref": "sequence_field.v1.schema.json"}
+    },
+    "human_reference_gate": {"$ref": "#/$defs/gate_record"},
+    "hazard_screen": {"$ref": "#/$defs/gate_record"},
+    "candidate_count": {"type": "integer", "minimum": 0},
+    "candidates_ranked": {"type": "boolean"},
+    "release": {"type": "boolean"}
+  },
+  "$defs": {
+    "gate_record": {
+      "type": "object",
+      "required": ["status", "verdict"],
+      "properties": {
+        "status": {"type": "string"},
+        "verdict": {"type": "string"},
+        "reason": {"type": "string"},
+        "reference_sha256": {"type": "string"},
+        "per_sequence": {"type": "array"}
+      }
+    }
+  }
+}

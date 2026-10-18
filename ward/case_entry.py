@@ -1,8 +1,8 @@
 """Entry point for a synthetic immunology case record beside the S01-S15 scenario table.
 
-A signed, schema-valid case runs ward harness gates and letters endware, emitting a verifiable
-hash-chained trace (ward/tracechain.py) with the case record sha256 pinned as case_source.
-Unsigned or invalid records refuse before any harness gate runs.
+Requires a signed bindi.immunology_case.v1 record and a signed bindi.ward_handoff.v1 JSON hand-off
+from bindi. Ward verifies bindi output gates on the hand-off (does not re-run them), then runs
+harness gates and letters. Emits tracechain JSONL with case_source and handoff_source pinned.
 """
 
 from __future__ import annotations
@@ -16,8 +16,10 @@ from typing import Any
 
 from . import immunology_case as ic
 from . import tracechain as tc
+from . import ward_handoff as wh
 from .endware import letter
 from .harness import Harness
+from .patient_id import canonical_patient_id, letters_patient_id
 from .scenarios import A, CASE, DISC, answer, tick
 from .site_profile import FAMILY_DOCTOR as FD
 
@@ -28,6 +30,8 @@ EXIT_WARD_FAIL = 3
 
 STAGES = (
     "case_validate",
+    "handoff_validate",
+    "bindi_gates_record",
     "forms_gates",
     "orders_gates",
     "harness_check",
@@ -38,12 +42,6 @@ STAGES = (
 
 def case_seed(case_id: str) -> int:
     return int(hashlib.sha256(case_id.encode()).hexdigest()[:8], 16) % 90000 + 1000
-
-
-def harness_patient(case_id: str) -> str:
-    """Patient id for forms/orders/letters (letters rejects some SYNTH-IMM-* shapes)."""
-    slug = case_id.removeprefix("SYNTH-").replace("-", "").replace(".", "")
-    return f"SYNTH-P{slug}"[:24]
 
 
 def episode_ids(seed: int) -> tuple[str, str]:
@@ -65,9 +63,33 @@ def _emit_stage(events: list[tc.Event], stage: str, case_id: str, seed: int, *, 
     events.append(tc.Event(seed=seed, content=_event_content(stage, case_id, seed, inputs=inputs, outputs=outputs)))
 
 
-def drive_case_harness(h: Harness, case: dict[str, Any], outdir: str, *, seed: int) -> dict[str, Any]:
-    """Run forms and orders episodes and build a clinician letter. Harness gates only; not the scenario scorer."""
-    patient = harness_patient(case["case_id"])
+def _evidence_note_text(handoff: dict[str, Any]) -> str:
+    level = handoff.get("evidence_level", "sequence_level")
+    label = (
+        "sequence-level evidence only; not structure-validated"
+        if level == "sequence_level"
+        else "structure-validated evidence"
+    )
+    parts = [f"Design hand-off evidence level: {level} ({label})."]
+    shown = handoff.get("shown_sequences") or []
+    if shown:
+        seqs = ", ".join(str(row.get("sequence")) for row in shown if row.get("sequence"))
+        parts.append(f"Shown sequences ({len(shown)}): {seqs}.")
+    return " ".join(parts)
+
+
+def drive_case_harness(
+    h: Harness,
+    case: dict[str, Any],
+    handoff: dict[str, Any],
+    outdir: str,
+    *,
+    seed: int,
+) -> dict[str, Any]:
+    """Run forms and orders episodes and build a clinician letter. Harness gates only."""
+    case_id = case["case_id"]
+    patient = canonical_patient_id(case_id)
+    letters_line_patient = letters_patient_id(case_id)
     ep_f, ep_o = episode_ids(seed)
     consent = case["consent"]
     neo = case["neoantigen"]
@@ -95,27 +117,65 @@ def drive_case_harness(h: Harness, case: dict[str, Any], outdir: str, *, seed: i
     dr.step(ep_o, A("submit"))
     orders_check = h.check(ep_o)
 
-    art = letter(h, outdir, patient, [ep_f], FD, f"update to {FD}", {})
+    phrases = {
+        "design_use_confirmed": (_evidence_note_text(handoff), None),
+    }
+    art = letter(
+        h,
+        outdir,
+        patient,
+        [ep_f],
+        FD,
+        f"update to {FD}",
+        phrases,
+        notes_patient=letters_line_patient,
+    )
     return {
         "forms_check": forms_check,
         "orders_check": orders_check,
         "artifact": art,
         "letter_exit": art.get("exit"),
         "letter_path": art.get("path"),
+        "case_id": case_id,
+        "patient_id": patient,
+        "letters_patient_id": letters_line_patient,
     }
+
+
+def _write_refusal_trace(
+    events: list[tc.Event],
+    trace_path: pathlib.Path,
+    *,
+    case_sha256: str,
+    handoff_sha256: str | None,
+    case_id: str,
+    seed: int,
+    salt,
+    signing_key,
+    label: str,
+) -> None:
+    header_extra = {
+        "case_source": case_sha256,
+        "source_label": label,
+    }
+    if handoff_sha256:
+        header_extra["handoff_source"] = handoff_sha256
+    trace = tc.build_chain(events, salt=_salt(salt), signing_key=_key(signing_key), header_extra=header_extra)
+    tc.write_trace(trace, trace_path)
 
 
 def run_case(
     case_path: str | pathlib.Path,
     outdir: str | pathlib.Path,
     *,
+    handoff_path: str | pathlib.Path | None = None,
     trace_path: str | pathlib.Path | None = None,
     pack: str = "au",
     language: str = "en",
     salt: bytes | None = None,
     signing_key=None,
 ) -> dict[str, Any]:
-    """Validate, optionally run ward gates, write harness trace.jsonl and canonical tracechain JSONL."""
+    """Validate case + handoff, verify bindi gates, run ward gates, write traces."""
     case_path = pathlib.Path(case_path)
     outdir = pathlib.Path(outdir)
     outdir.mkdir(parents=True, exist_ok=True)
@@ -123,9 +183,10 @@ def run_case(
 
     raw = case_path.read_bytes()
     case_sha256 = hashlib.sha256(raw).hexdigest()
+    handoff_sha256 = None
     events: list[tc.Event] = []
     seed = 0
-    case_id = None
+    case_id = "unknown"
 
     try:
         case = ic.load_case_bytes(raw)
@@ -135,14 +196,22 @@ def run_case(
         _emit_stage(
             events,
             "case_validate",
-            case_id or "unknown",
-            seed or 0,
+            case_id,
+            seed,
             inputs={"case_sha256": case_sha256, "case_file": str(case_path)},
             outputs={"status": "error", "reason": str(exc)},
         )
-        header_extra = {"case_source": case_sha256, "source_label": "ward-case-entry/refused"}
-        trace = tc.build_chain(events, salt=_salt(salt), signing_key=_key(signing_key), header_extra=header_extra)
-        tc.write_trace(trace, trace_path)
+        _write_refusal_trace(
+            events,
+            trace_path,
+            case_sha256=case_sha256,
+            handoff_sha256=None,
+            case_id=case_id,
+            seed=seed,
+            salt=salt,
+            signing_key=signing_key,
+            label="ward-case-entry/refused",
+        )
         return {
             "exit_code": EXIT_CASE_INVALID,
             "trace": str(trace_path),
@@ -160,9 +229,17 @@ def run_case(
         outputs={"status": "refused" if refusals else "ok", "signed": ic.is_signed(case), "refusals": refusals},
     )
     if refusals:
-        header_extra = {"case_source": case_sha256, "source_label": f"ward-case-entry:{case_id}"}
-        trace = tc.build_chain(events, salt=_salt(salt), signing_key=_key(signing_key), header_extra=header_extra)
-        tc.write_trace(trace, trace_path)
+        _write_refusal_trace(
+            events,
+            trace_path,
+            case_sha256=case_sha256,
+            handoff_sha256=None,
+            case_id=case_id,
+            seed=seed,
+            salt=salt,
+            signing_key=signing_key,
+            label=f"ward-case-entry:{case_id}",
+        )
         return {
             "exit_code": EXIT_REFUSED,
             "trace": str(trace_path),
@@ -172,10 +249,126 @@ def run_case(
             "stages": ["case_validate"],
         }
 
-    h = Harness(f"case:{case_id}", seed, pack=pack, language=language)
-    h._emit("meta", case_entry=True, case_id=case_id, case_source=case_sha256)
+    if handoff_path is None:
+        _emit_stage(
+            events,
+            "handoff_validate",
+            case_id,
+            seed,
+            outputs={"status": "refused", "reason": "handoff file required"},
+        )
+        _write_refusal_trace(
+            events,
+            trace_path,
+            case_sha256=case_sha256,
+            handoff_sha256=None,
+            case_id=case_id,
+            seed=seed,
+            salt=salt,
+            signing_key=signing_key,
+            label=f"ward-case-entry:{case_id}",
+        )
+        return {
+            "exit_code": EXIT_REFUSED,
+            "trace": str(trace_path),
+            "case_source": case_sha256,
+            "case_id": case_id,
+            "stages": ["case_validate", "handoff_validate"],
+        }
 
-    ward_out = drive_case_harness(h, case, str(outdir), seed=seed)
+    handoff_path = pathlib.Path(handoff_path)
+    hraw = handoff_path.read_bytes()
+    handoff_sha256 = hashlib.sha256(hraw).hexdigest()
+
+    try:
+        handoff = wh.load_handoff_bytes(hraw)
+    except wh.HandoffError as exc:
+        _emit_stage(
+            events,
+            "handoff_validate",
+            case_id,
+            seed,
+            inputs={"handoff_sha256": handoff_sha256, "handoff_file": str(handoff_path)},
+            outputs={"status": "error", "reason": str(exc)},
+        )
+        _write_refusal_trace(
+            events,
+            trace_path,
+            case_sha256=case_sha256,
+            handoff_sha256=handoff_sha256,
+            case_id=case_id,
+            seed=seed,
+            salt=salt,
+            signing_key=signing_key,
+            label=f"ward-case-entry:{case_id}",
+        )
+        return {
+            "exit_code": EXIT_CASE_INVALID,
+            "trace": str(trace_path),
+            "case_source": case_sha256,
+            "handoff_source": handoff_sha256,
+            "case_id": case_id,
+            "stages": ["case_validate", "handoff_validate"],
+        }
+
+    hrefusals = wh.admission_refusals(handoff, case_id=case_id)
+    _emit_stage(
+        events,
+        "handoff_validate",
+        case_id,
+        seed,
+        inputs={"handoff_sha256": handoff_sha256, "handoff_file": str(handoff_path)},
+        outputs={
+            "status": "refused" if hrefusals else "ok",
+            "signed": wh.is_signed(handoff),
+            "evidence_level": handoff.get("evidence_level"),
+            "refusals": hrefusals,
+        },
+    )
+    if hrefusals:
+        _write_refusal_trace(
+            events,
+            trace_path,
+            case_sha256=case_sha256,
+            handoff_sha256=handoff_sha256,
+            case_id=case_id,
+            seed=seed,
+            salt=salt,
+            signing_key=signing_key,
+            label=f"ward-case-entry:{case_id}",
+        )
+        return {
+            "exit_code": EXIT_REFUSED,
+            "trace": str(trace_path),
+            "case_source": case_sha256,
+            "handoff_source": handoff_sha256,
+            "case_id": case_id,
+            "refusals": hrefusals,
+            "stages": ["case_validate", "handoff_validate"],
+        }
+
+    gate_record = wh.verify_bindi_gates(handoff)
+    _emit_stage(
+        events,
+        "bindi_gates_record",
+        case_id,
+        seed,
+        outputs={"status": "ok", **gate_record},
+    )
+
+    h = Harness(f"case:{case_id}", seed, pack=pack, language=language)
+    h._emit(
+        "meta",
+        case_entry=True,
+        case_id=case_id,
+        patient_id=canonical_patient_id(case_id),
+        letters_patient_id=letters_patient_id(case_id),
+        case_source=case_sha256,
+        handoff_source=handoff_sha256,
+        evidence_level=handoff.get("evidence_level"),
+    )
+
+    ward_out = drive_case_harness(h, case, handoff, str(outdir), seed=seed)
     h.write(str(outdir / "trace.jsonl"))
 
     forms_ok = bool(ward_out["forms_check"].get("complete") or ward_out["forms_check"].get("all_done"))
@@ -212,6 +405,10 @@ def run_case(
             "status": "ok" if letter_ok else "fail",
             "exit": letter_exit,
             "path": ward_out.get("letter_path"),
+            "evidence_level": handoff.get("evidence_level"),
+            "case_id": case_id,
+            "patient_id": ward_out.get("patient_id"),
+            "letters_patient_id": ward_out.get("letters_patient_id"),
         },
     )
     exit_code = EXIT_OK if letter_ok and forms_ok and orders_ok else EXIT_WARD_FAIL
@@ -223,7 +420,12 @@ def run_case(
         outputs={"status": "ok" if exit_code == EXIT_OK else "fail", "exit_code": exit_code},
     )
 
-    header_extra = {"case_source": case_sha256, "source_label": f"ward-case-entry:{case_id}"}
+    header_extra = {
+        "case_source": case_sha256,
+        "handoff_source": handoff_sha256,
+        "source_label": f"ward-case-entry:{case_id}",
+        "evidence_level": handoff.get("evidence_level"),
+    }
     trace = tc.build_chain(events, salt=_salt(salt), signing_key=_key(signing_key), header_extra=header_extra)
     tc.write_trace(trace, trace_path)
 
@@ -232,7 +434,10 @@ def run_case(
         "trace": str(trace_path),
         "harness_trace": str(outdir / "trace.jsonl"),
         "case_source": case_sha256,
+        "handoff_source": handoff_sha256,
         "case_id": case_id,
+        "patient_id": ward_out.get("patient_id"),
+        "letters_patient_id": ward_out.get("letters_patient_id"),
         "letter_path": ward_out.get("letter_path"),
         "stages": list(STAGES),
     }
@@ -251,9 +456,12 @@ def _key(signing_key):
 
 
 def main(argv=None) -> int:
-    p = argparse.ArgumentParser(prog="python3 -m ward.case_entry",
-                                description="Run a synthetic immunology case through ward gates and letters.")
+    p = argparse.ArgumentParser(
+        prog="python3 -m ward.case_entry",
+        description="Run a synthetic immunology case and bindi hand-off through ward gates and letters.",
+    )
     p.add_argument("case_file", type=pathlib.Path, help="bindi.immunology_case.v1 JSON record")
+    p.add_argument("handoff_file", type=pathlib.Path, help="bindi.ward_handoff.v1 JSON hand-off from bindi")
     p.add_argument("--outdir", type=pathlib.Path, default=pathlib.Path("case-out"),
                    help="directory for harness trace and letter artifacts")
     p.add_argument("--trace", type=pathlib.Path, default=None,
@@ -262,7 +470,14 @@ def main(argv=None) -> int:
     p.add_argument("--language", default="en")
     args = p.parse_args(argv)
     try:
-        result = run_case(args.case_file, args.outdir, trace_path=args.trace, pack=args.pack, language=args.language)
+        result = run_case(
+            args.case_file,
+            args.outdir,
+            handoff_path=args.handoff_file,
+            trace_path=args.trace,
+            pack=args.pack,
+            language=args.language,
+        )
     except (KeyError, ValueError) as exc:
         print(f"error: {exc}", file=os.sys.stderr)
         return 2
