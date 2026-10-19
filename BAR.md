@@ -14,6 +14,12 @@ Entries here describe what an optional check proves and what it does **not** pro
 
 **Does not prove:** that the model’s yes/no is correct, that humans act on abstain labels, or regulatory compliance outside this harness.
 
+## post-guard wrong-patient write seam (`ward/harness.py`, `tests/test_live_records.py`, S07 only)
+
+**Proves:** the LIVE scorer (`wrong_patient_write` pass mark) detects an accepted agent write whose handle patient does not own the target episode when that write is planted after a guarded S07 run — i.e. a downstream/middleware fault that already got past harness binding and the live guard.
+
+**Does not prove:** that the live guard or `RF-NOT-YOURS` binding blocks the attack on the real path; the guard is tested separately by the refusal assertion on `observe` for the other patient’s episode (`SYNTH-EP-0702` refused while `SYNTH-P0701` holds the handle).
+
 ## jurisdiction scan (`jurisdiction_scan.toml`)
 
 **Log (2026-10-17):** Squash merge `c8f6c457` permanently carries the Cursor Agent `Co-authored-by` trailer address (`cursoragent@cursor.com`) in git history. That address is a service/bot mailbox, not a person. History is deliberately not rewritten. The forward-only fix is an explicit cited allowlist in `data/commit_message_bot_allowlist.toml` used only when scanning commit messages; tracked file contents still fail on that address. Any other email in a commit message still fails.
